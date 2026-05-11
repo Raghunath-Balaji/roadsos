@@ -6,6 +6,17 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc, collection } from "firebase/firestore";
 
+export interface UserProfile {
+  uid: string;
+  email: string;
+  name: string;
+  allergens: string;
+  medications: string;
+  bloodGroup: string;
+  role: string;
+  createdAt: number;
+}
+
 /**
  * Sign Up a Citizen
  * Saves to root 'userDetails' collection.
