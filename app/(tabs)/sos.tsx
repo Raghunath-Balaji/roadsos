@@ -121,8 +121,15 @@ export default function SosScreen() {
     }
   };
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
+  const takePhoto = async () => {
+    // Request camera permissions
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("Permission Denied", "We need camera access to take incident photos.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
@@ -239,18 +246,18 @@ export default function SosScreen() {
 
                     {!activeAlert.imageUrl && (
                       <TouchableOpacity 
-                        onPress={pickImage}
+                        onPress={takePhoto}
                         className="bg-white border border-dashed border-slate-300 rounded-xl p-4 items-center mb-4"
                       >
                         {imageUri ? (
                           <View className="items-center">
                             <Image source={{ uri: imageUri }} className="w-20 h-20 rounded-lg mb-2" />
-                            <Text className="text-blue-600 font-medium text-xs">Change Photo</Text>
+                            <Text className="text-blue-600 font-medium text-xs">Retake Photo</Text>
                           </View>
                         ) : (
                           <View className="items-center">
                             <Ionicons name="camera" size={24} color="#94a3b8" />
-                            <Text className="text-slate-400 font-medium text-xs mt-1">Add Photo</Text>
+                            <Text className="text-slate-400 font-medium text-xs mt-1">Take Photo</Text>
                           </View>
                         )}
                       </TouchableOpacity>
