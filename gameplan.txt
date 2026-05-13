@@ -46,12 +46,19 @@ Road SOS is a dual-sided React Native mobile application designed for emergency 
 2. **Live Tracking:** When a helper accepts, publish their location updates to Firebase Realtime DB.
 3. **Citizen Tracker:** Read the helper's location from Realtime DB and display it on the Citizen's map.
 
-### Phase 4: First Aid AI Assistant
-1. Develop the chat UI interface.
-2. Setup the backend/local bridge to interface with the fine-tuned Gemma 2B model. (We will need to finalize whether to start with a cloud-hosted API for speed or immediately tackle the local on-device deployment).
+### Phase 5: Bystander Reports & Enhanced Alert Management
+1. **Schema Update:** Enhanced `ActiveAlert` interface in `alertService.ts` to support `isBystanderReport` and `reportedPatientName`.
+2. **Bystander Creation Logic:** Implemented `createBystanderAlert` to write directly to `liveAlerts`, bypassing personal user history for bystander reports.
+3. **Enhanced Alert Actions:** Updated `acceptAlert` and `markAsSaved` to conditionally skip user history updates based on the report type.
+4. **Bystander UI:** Developed `app/(tabs)/report.tsx` with a form requiring mandatory camera capture, optional patient name (defaults to John Doe), severity selection, and optional details.
+5. **Helper Dashboard Integration:** Updated `app/(helper)/dashboard.tsx` to conditionally display bystander-specific details and patient names fetched from `userDetails` for standard alerts.
 
 ## Verification & Testing
 - Test Google OAuth flows for both new and returning users.
 - Verify that self-reporting instantly pushes to the helper feed.
 - Simulate helper movement to verify real-time tracking latency.
 - Ensure the AI model responds accurately to first-aid scenarios.
+- Verify bystander reports require a photo and show up correctly on the Helper Dashboard without reporter medical history.
+
+
+wuv u

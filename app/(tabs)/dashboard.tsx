@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 
 /**
  * Dashboard Screen
- * Displays the logged-in user's medical somethprofile retrieved from Firestore.
+ * Displays the logged-in user's medical profile retrieved from Firestore.
  */
 export default function Dashboard() {
   const [profile, setProfile] = useState<UserProfile | null>(null);

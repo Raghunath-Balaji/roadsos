@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, ScrollView, Alert, FlatList, Image } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, ScrollView, Alert, Modal, Image, Dimensions } from 'react-native';
+import LeafletMap from '../LeafletMap';
 import { auth, db } from '../../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { logOut } from '../../services/authService';
@@ -7,6 +8,8 @@ import { listenToActiveAlerts, ActiveAlert, acceptAlert } from '../../services/a
 import { UserProfile } from '../../services/authService';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+const { width } = Dimensions.get('window');
 
 /**
  * Helper Dashboard (Hospital Portal)
@@ -19,6 +22,7 @@ export default function HelperDashboard() {
   const [patientInfo, setPatientInfo] = useState<{ [key: string]: UserProfile }>({});
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<ActiveAlert | null>(null);
   const router = useRouter();
 
   /**
@@ -123,11 +127,15 @@ export default function HelperDashboard() {
         alert.userId,
         user.uid,
         staffInfo?.name || "Emergency Responder",
-        hospitalInfo?.name || "Emergency Center"
+        hospitalInfo?.name || "Emergency Center",
+        alert.isBystanderReport
       );
 
       if (result.success) {
-        Alert.alert("Success", "Incident accepted. Proceed to location.");
+        router.push({
+          pathname: '/(helper)/mission',
+          params: { alertId: alert.id, userId: alert.userId }
+        });
       } else {
         Alert.alert("Error", result.error);
       }
@@ -140,86 +148,42 @@ export default function HelperDashboard() {
 
   const renderAlertItem = ({ item }: { item: ActiveAlert }) => (
     <TouchableOpacity 
-      className="bg-slate-900 rounded-3xl p-5 mb-4 border border-slate-800"
-      onPress={() => {
-        Alert.alert("Alert Selected", `Incident ID: ${item.id}\nSeverity: ${item.severity.toUpperCase()}`);
-      }}
+      className="bg-slate-900 rounded-3xl p-4 mb-3 border border-slate-800 flex-row items-center"
+      onPress={() => setSelectedAlert(item)}
     >
-      <View className="flex-row justify-between items-start mb-3">
-        <View className="flex-row items-center">
+      {item.imageUrl ? (
+        <Image 
+          source={{ uri: item.imageUrl }} 
+          className="w-16 h-16 rounded-2xl mr-4 bg-slate-800"
+          resizeMode="cover"
+        />
+      ) : (
+        <View className="w-16 h-16 rounded-2xl mr-4 bg-slate-800 items-center justify-center border border-slate-700">
+          <Ionicons name="image-outline" size={24} color="#475569" />
+        </View>
+      )}
+
+      <View className="flex-1">
+        <View className="flex-row items-center mb-1">
           <View 
-            className="w-3 h-3 rounded-full mr-2" 
+            className="w-2 h-2 rounded-full mr-2" 
             style={{ backgroundColor: getSeverityColor(item.severity) }} 
           />
-          <Text className="text-white font-bold uppercase text-xs tracking-widest">
-            {item.severity} SEVERITY
+          <Text className="text-white font-bold text-xs uppercase tracking-wider">
+            {item.severity}
           </Text>
         </View>
+        <Text className="text-white text-lg font-bold" numberOfLines={1}>
+          {item.isBystanderReport ? item.reportedPatientName : (patientInfo[item.userId]?.name || 'Loading...')}
+        </Text>
         <Text className="text-slate-500 text-[10px] font-mono">
           {item.timestamp?.toDate().toLocaleTimeString() || 'Just now'}
         </Text>
       </View>
 
-      <View className="mb-4">
-        <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">PATIENT NAME</Text>
-        <Text className="text-white text-lg font-medium">
-          {patientInfo[item.userId]?.name || 'Loading...'}
-        </Text>
+      <View className="bg-slate-800 p-2 rounded-xl">
+        <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
       </View>
-
-      {patientInfo[item.userId] && (
-        <View className="flex-row gap-4 mb-4">
-          <View className="flex-1">
-            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">ALLERGIES</Text>
-            <Text className="text-orange-400 text-xs font-medium">
-              {patientInfo[item.userId].allergens || 'None reported'}
-            </Text>
-          </View>
-          <View className="flex-1">
-            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">MEDICATIONS</Text>
-            <Text className="text-blue-400 text-xs font-medium">
-              {patientInfo[item.userId].medications || 'None listed'}
-            </Text>
-          </View>
-        </View>
-      )}
-
-      <View className="flex-row items-center bg-slate-800/50 p-3 rounded-2xl">
-        <Ionicons name="location" size={16} color="#94a3b8" />
-        <Text className="text-slate-300 text-xs ml-2">
-          {item.location.latitude.toFixed(4)}, {item.location.longitude.toFixed(4)}
-        </Text>
-      </View>
-
-      {item.additionalDetails && (
-        <View className="mt-4 bg-slate-800/30 p-3 rounded-2xl border border-slate-800">
-          <Text className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Additional Details</Text>
-          <Text className="text-slate-200 text-xs leading-5">{item.additionalDetails}</Text>
-        </View>
-      )}
-
-      {item.imageUrl && (
-        <View className="mt-4">
-          <Text className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-2">Incident Photo</Text>
-          <Image 
-            source={{ uri: item.imageUrl }} 
-            className="w-full h-48 rounded-2xl bg-slate-800"
-            resizeMode="cover"
-          />
-        </View>
-      )}
-
-      <TouchableOpacity 
-        className={`mt-4 py-3 rounded-xl items-center ${processingId === item.id ? 'bg-slate-700' : 'bg-red-600'}`}
-        onPress={() => handleAcceptIncident(item)}
-        disabled={processingId !== null}
-      >
-        {processingId === item.id ? (
-          <ActivityIndicator size="small" color="white" />
-        ) : (
-          <Text className="text-white font-bold uppercase text-xs">Accept Incident</Text>
-        )}
-      </TouchableOpacity>
     </TouchableOpacity>
   );
 
@@ -295,6 +259,138 @@ export default function HelperDashboard() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Case Detail Modal */}
+      <Modal
+        visible={selectedAlert !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedAlert(null)}
+      >
+        <View className="flex-1 justify-end bg-black/80">
+          <View className="bg-slate-900 rounded-t-[50px] p-6 max-h-[90%] border-t border-slate-800">
+            <View className="items-center mb-4">
+              <View className="w-12 h-1.5 bg-slate-800 rounded-full mb-6" />
+              <View className="flex-row items-center justify-between w-full">
+                <Text className="text-white text-2xl font-black uppercase tracking-tighter">Emergency Details</Text>
+                <TouchableOpacity 
+                  onPress={() => setSelectedAlert(null)}
+                  className="bg-slate-800 w-10 h-10 rounded-full items-center justify-center"
+                >
+                  <Ionicons name="close" size={24} color="white" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {selectedAlert && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Visual Verification */}
+                {selectedAlert.imageUrl && (
+                  <View className="mb-6 overflow-hidden rounded-[30px] border border-slate-800">
+                    <Image 
+                      source={{ uri: selectedAlert.imageUrl }} 
+                      className="w-full h-56 bg-slate-800"
+                      resizeMode="cover"
+                    />
+                    <View className="absolute top-4 left-4 bg-red-600 px-3 py-1 rounded-full shadow-lg">
+                      <Text className="text-white font-bold text-[10px] uppercase">Incident Image</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Patient Overview */}
+                <View className="bg-slate-800/50 p-6 rounded-[35px] border border-slate-800 mb-6">
+                  <View className="flex-row justify-between items-center mb-6">
+                    <View>
+                      <Text className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Patient Name</Text>
+                      <Text className="text-white text-2xl font-bold">
+                        {selectedAlert.isBystanderReport ? selectedAlert.reportedPatientName : (patientInfo[selectedAlert.userId]?.name || 'Loading...')}
+                      </Text>
+                    </View>
+                    <View className="items-end">
+                      <Text className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Severity</Text>
+                      <View className="flex-row items-center bg-slate-900 px-3 py-1 rounded-full border border-slate-700">
+                        <View className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: getSeverityColor(selectedAlert.severity) }} />
+                        <Text className="text-white font-bold text-[10px] uppercase">{selectedAlert.severity}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View className="flex-row gap-4">
+                    <View className="flex-1 bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                      <Text className="text-orange-500 text-[9px] font-bold uppercase tracking-widest mb-1">Allergies</Text>
+                      <Text className="text-slate-200 text-xs font-medium">
+                        {selectedAlert.isBystanderReport ? 'Unavailable' : (patientInfo[selectedAlert.userId]?.allergens || 'None reported')}
+                      </Text>
+                    </View>
+                    <View className="flex-1 bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                      <Text className="text-blue-500 text-[9px] font-bold uppercase tracking-widest mb-1">Medications</Text>
+                      <Text className="text-slate-200 text-xs font-medium">
+                        {selectedAlert.isBystanderReport ? 'Unavailable' : (patientInfo[selectedAlert.userId]?.medications || 'None listed')}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Additional Details */}
+                {selectedAlert.additionalDetails && (
+                  <View className="mb-6">
+                    <Text className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-3 ml-2">Incident Briefing</Text>
+                    <View className="bg-slate-900 p-5 rounded-[30px] border border-slate-800">
+                      <Text className="text-slate-300 leading-6 text-sm">{selectedAlert.additionalDetails}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Location Map */}
+                <View className="mb-8">
+                  <Text className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-3 ml-2">Exact Location</Text>
+                  <View className="w-full h-48 rounded-[35px] overflow-hidden border border-slate-800 bg-slate-900">
+                    <LeafletMap 
+                      latitude={selectedAlert.location.latitude}
+                      longitude={selectedAlert.location.longitude}
+                    />
+                  </View>
+                  <View className="flex-row items-center mt-3 ml-4">
+                    <Ionicons name="location" size={14} color="#94a3b8" />
+                    <Text className="text-slate-500 text-[10px] ml-1 font-mono">
+                      LAT: {selectedAlert.location.latitude.toFixed(6)} | LONG: {selectedAlert.location.longitude.toFixed(6)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Accept Button */}
+                <TouchableOpacity 
+                  className={`mb-10 py-5 rounded-[25px] items-center flex-row justify-center ${processingId === selectedAlert.id ? 'bg-slate-800' : 'bg-red-600'}`}
+                  onPress={() => {
+                    handleAcceptIncident(selectedAlert);
+                    setSelectedAlert(null);
+                  }}
+                  disabled={processingId !== null}
+                >
+                  {processingId === selectedAlert.id ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkbox" size={24} color="white" className="mr-3" />
+                      <Text className="text-white font-black uppercase tracking-widest ml-3">Accept Mission</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
+const mapStyle = [
+  { "elementType": "geometry", "stylers": [{ "color": "#1e293b" }] },
+  { "elementType": "labels.text.fill", "stylers": [{ "color": "#94a3b8" }] },
+  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#1e293b" }] },
+  { "featureType": "administrative", "elementType": "geometry", "stylers": [{ "color": "#334155" }] },
+  { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#334155" }] },
+  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#0f172a" }] }
+];

@@ -1,5 +1,5 @@
 import { db, storage } from "../config/firebase";
-import { collection, serverTimestamp, query, where, onSnapshot, doc, writeBatch } from "firebase/firestore";
+import { collection, serverTimestamp, query, where, onSnapshot, doc, writeBatch, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export type AlertSeverity = 'low' | 'medium' | 'high';
@@ -22,6 +22,8 @@ export interface ActiveAlert {
   acceptedAt?: any;
   additionalDetails?: string;
   imageUrl?: string;
+  isBystanderReport?: boolean;
+  reportedPatientName?: string;
 }
 
 /**
@@ -114,18 +116,54 @@ export const createAlert = async (
 };
 
 /**
+ * Creates a bystander alert directly in the liveAlerts collection without writing to user history.
+ */
+export const createBystanderAlert = async (
+  reporterId: string,
+  patientName: string,
+  severity: AlertSeverity,
+  location: LocationData,
+  details: string,
+  imageUrl: string
+) => {
+  try {
+    const liveAlertRef = doc(collection(db, "liveAlerts"));
+    
+    const alertData = {
+      userId: reporterId,
+      isBystanderReport: true,
+      reportedPatientName: patientName || 'John Doe',
+      severity,
+      location,
+      additionalDetails: details,
+      imageUrl: imageUrl,
+      status: 'pending',
+      helperId: null,
+      timestamp: serverTimestamp(),
+    };
+
+    await setDoc(liveAlertRef, alertData);
+
+    return { success: true, id: liveAlertRef.id };
+  } catch (error: any) {
+    console.error("Error creating bystander alert:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Accepts an emergency alert.
- * Updates both the user's alert and the live alert.
+ * Updates both the user's alert and the live alert, unless it is a bystander report.
  */
 export const acceptAlert = async (
   alertId: string,
   userId: string,
   helperId: string,
   doctorName: string,
-  hospitalName: string
+  hospitalName: string,
+  isBystanderReport: boolean = false
 ) => {
   try {
-    const userAlertRef = doc(db, "userDetails", userId, "Alerts", alertId);
     const liveAlertRef = doc(db, "liveAlerts", alertId);
 
     const updateData = {
@@ -137,8 +175,12 @@ export const acceptAlert = async (
     };
 
     const batch = writeBatch(db);
-    batch.update(userAlertRef, updateData);
     batch.update(liveAlertRef, updateData);
+
+    if (!isBystanderReport) {
+      const userAlertRef = doc(db, "userDetails", userId, "Alerts", alertId);
+      batch.update(userAlertRef, updateData);
+    }
 
     await batch.commit();
     return { success: true };
@@ -151,16 +193,19 @@ export const acceptAlert = async (
 /**
  * Marks an emergency as resolved and removes it from live alerts.
  */
-export const markAsSaved = async (alertId: string, userId: string) => {
+export const markAsSaved = async (alertId: string, userId: string, isBystanderReport: boolean = false) => {
   try {
-    const userAlertRef = doc(db, "userDetails", userId, "Alerts", alertId);
     const liveAlertRef = doc(db, "liveAlerts", alertId);
 
     const batch = writeBatch(db);
-    // Update status in user history
-    batch.update(userAlertRef, { status: 'resolved', resolvedAt: serverTimestamp() });
+    
     // Remove from live alerts
     batch.delete(liveAlertRef);
+
+    if (!isBystanderReport) {
+      const userAlertRef = doc(db, "userDetails", userId, "Alerts", alertId);
+      batch.update(userAlertRef, { status: 'resolved', resolvedAt: serverTimestamp() });
+    }
 
     await batch.commit();
     return { success: true };
@@ -202,7 +247,7 @@ export const listenToActiveAlerts = (callback: (alerts: ActiveAlert[]) => void) 
 };
 
 /**
- * Listens to a specific user's most recent active alert.
+ * Listens to a specific user's most recent active alert (excluding bystander reports).
  */
 export const listenToMyAlert = (userId: string, callback: (alert: ActiveAlert | null) => void) => {
   const alertsQuery = query(
@@ -217,11 +262,16 @@ export const listenToMyAlert = (userId: string, callback: (alert: ActiveAlert | 
       return;
     }
 
-    // Since a user should ideally only have one active alert at a time, we take the most recent
+    // Map the docs and filter out any bystander reports
     const alerts = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    } as ActiveAlert));
+    } as ActiveAlert)).filter(alert => !alert.isBystanderReport);
+
+    if (alerts.length === 0) {
+      callback(null);
+      return;
+    }
 
     alerts.sort((a, b) => {
       const timeA = a.timestamp?.toMillis() || 0;

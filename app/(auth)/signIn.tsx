@@ -69,7 +69,7 @@ export default function SignInScreen() {
         <Link href="/signUp" asChild>
           <TouchableOpacity className="mt-6">
             <Text className="text-slate-500 text-center font-medium">
-              Don't have an account? <Text className="text-blue-600 font-bold">Sign Up</Text>
+              Don`&apos;`t have an account? <Text className="text-blue-600 font-bold">Sign Up</Text>
             </Text>
           </TouchableOpacity>
         </Link>
