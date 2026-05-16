@@ -13,7 +13,7 @@ import "../globals.css";
 export default function RootLayout() {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<User | null>(null);
-  const [userRole, setUserRole] = useState<'citizen' | 'helper' | null>(null);
+  const [userRole, setUserRole] = useState<'citizen' | 'helper' | 'admin' | null>(null);
   
   const router = useRouter();
   const segments = useSegments();
@@ -27,15 +27,21 @@ export default function RootLayout() {
       
       if (firebaseUser) {
         try {
-          // 1. Check if user is a Citizen (userDetails)
-          const citizenDoc = await getDoc(doc(db, "userDetails", firebaseUser.uid));
-          if (citizenDoc.exists()) {
-            setUserRole('citizen');
+          // 1. Check if user is an Admin (adminRegistry)
+          const adminDoc = await getDoc(doc(db, "adminRegistry", firebaseUser.uid));
+          if (adminDoc.exists()) {
+            setUserRole('admin');
           } else {
-            // 2. Check if user is a Helper (staffRegistry)
-            const staffDoc = await getDoc(doc(db, "staffRegistry", firebaseUser.uid));
-            if (staffDoc.exists()) {
-              setUserRole('helper');
+            // 2. Check if user is a Citizen (userDetails)
+            const citizenDoc = await getDoc(doc(db, "userDetails", firebaseUser.uid));
+            if (citizenDoc.exists()) {
+              setUserRole('citizen');
+            } else {
+              // 3. Check if user is a Helper (staffRegistry)
+              const staffDoc = await getDoc(doc(db, "staffRegistry", firebaseUser.uid));
+              if (staffDoc.exists()) {
+                setUserRole('helper'); // This covers helper-ambulance, etc. conceptually for redirection
+              }
             }
           }
         } catch (error) {
@@ -62,6 +68,7 @@ export default function RootLayout() {
     const isInsideAuth = currentSegment === '(auth)';
     const isInsideTabs = currentSegment === '(tabs)';
     const isInsideHelper = currentSegment === '(helper)';
+    const isInsideAdmin = currentSegment === '(admin)';
 
     // 1. Not Logged In
     if (!user) {
@@ -72,18 +79,27 @@ export default function RootLayout() {
       return;
     }
 
+    // NEW: If the user just signed up as an admin, don't steal them away from the success screen
+    const isAtAdminSignUp = segments[1] === 'adminSignUp';
+    if (isAtAdminSignUp) return;
+
     // 2. Logged In - Wait for role data
     if (!userRole) return;
 
     if (userRole === 'citizen') {
-      // Citizens stay in (tabs). If they are in (auth) or (helper), move them.
-      if (isInsideAuth || isInsideHelper) {
+      // Citizens stay in (tabs).
+      if (isInsideAuth || isInsideHelper || isInsideAdmin) {
         router.replace('/(tabs)/sos');
       }
     } else if (userRole === 'helper') {
-      // Helpers stay in (helper). If they are in (auth) or (tabs), move them.
-      if (isInsideAuth || isInsideTabs) {
+      // Helpers stay in (helper).
+      if (isInsideAuth || isInsideTabs || isInsideAdmin) {
         router.replace('/(helper)/dashboard');
+      }
+    } else if (userRole === 'admin') {
+      // Admins stay in (admin).
+      if (isInsideAuth || isInsideTabs || isInsideHelper) {
+        router.replace('/(admin)/dashboard');
       }
     }
   }, [user, userRole, initializing, segments]);
@@ -95,6 +111,7 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(helper)" />
+        <Stack.Screen name="(admin)" />
       </Stack>
       <StatusBar style="auto" />
     </>

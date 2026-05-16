@@ -1,8 +1,10 @@
 import { auth, db } from "../config/firebase";
+import { initializeApp, deleteApp, FirebaseApp } from "firebase/app";
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signOut 
+  signOut,
+  getAuth
 } from "firebase/auth";
 import { doc, setDoc, getDoc, collection } from "firebase/firestore";
 
@@ -10,17 +12,131 @@ export interface UserProfile {
   uid: string;
   email: string;
   name: string;
-  allergens: string;
-  medications: string;
-  bloodGroup: string;
+  allergens?: string;
+  medications?: string;
+  bloodGroup?: string;
   role: string;
   createdAt: number;
 }
 
-/**
- * Sign Up a Citizen
- * Saves to root 'userDetails' collection.
+/** 
+ * UTILITIES 
  */
+
+const generateUnitId = () => {
+  const digits = Math.floor(10000 + Math.random() * 90000);
+  return `HELP-${digits}`;
+};
+
+const generatePasscode = () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < 10; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
+/** 
+ * ADMIN AUTH 
+ */
+
+export const signUpAdmin = async (
+  entityName: string,
+  entityType: 'hospital' | 'ambulance' | 'police' | 'fire',
+  location: { latitude: number; longitude: number }
+) => {
+  try {
+    const unitId = generateUnitId();
+    const passcode = generatePasscode();
+    const adminEmail = `admin_${unitId}@roadsos.admin`;
+
+    const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, passcode);
+    const user = userCredential.user;
+
+    const entityData = {
+      name: entityName,
+      hospitalId: unitId,
+      type: entityType,
+      location: location,
+      passcode: passcode, // Stored for testing purposes
+      role: 'admin',
+      createdAt: Date.now(),
+    };
+
+    await setDoc(doc(db, "hospitals", unitId), entityData);
+    await setDoc(doc(db, "adminRegistry", user.uid), {
+      unitId: unitId,
+      role: 'admin'
+    });
+
+    return { user, unitId, passcode, error: null };
+  } catch (error: any) {
+    return { user: null, unitId: null, passcode: null, error: error.message };
+  }
+};
+
+export const signInAdmin = async (unitId: string, passcode: string) => {
+  try {
+    const adminEmail = `admin_${unitId}@roadsos.admin`;
+    const userCredential = await signInWithEmailAndPassword(auth, adminEmail, passcode);
+    return { user: userCredential.user, error: null };
+  } catch (error: any) {
+    return { user: null, error: error.message };
+  }
+};
+
+/** 
+ * STAFF ENROLLMENT 
+ */
+
+export const enrollStaff = async (
+  adminUnitId: string,
+  staffData: { name: string; email: string; password: string; role: string }
+) => {
+  let secondaryApp: FirebaseApp | undefined;
+  try {
+    const secondaryAppName = `SecondaryApp_${Date.now()}`;
+    // Initialize temporary app to prevent admin logout
+    secondaryApp = initializeApp(auth.app.options, secondaryAppName);
+    const secondaryAuth = getAuth(secondaryApp);
+
+    const userCredential = await createUserWithEmailAndPassword(
+      secondaryAuth, 
+      staffData.email, 
+      staffData.password
+    );
+    const staffUser = userCredential.user;
+
+    // Write to Global Registry
+    await setDoc(doc(db, "staffRegistry", staffUser.uid), {
+      hospitalId: adminUnitId,
+      role: staffData.role
+    });
+
+    // Write to Hospital Staff Subcollection
+    const staffRef = doc(db, "hospitals", adminUnitId, "staff", staffUser.uid);
+    await setDoc(staffRef, {
+      uid: staffUser.uid,
+      name: staffData.name,
+      email: staffData.email,
+      role: staffData.role,
+      createdAt: Date.now()
+    });
+
+    await signOut(secondaryAuth);
+    await deleteApp(secondaryApp);
+    return { success: true, error: null };
+  } catch (error: any) {
+    if (secondaryApp) await deleteApp(secondaryApp);
+    return { success: false, error: error.message };
+  }
+};
+
+/** 
+ * ORIGINAL CITIZEN & HELPER LOGIC 
+ */
+
 export const signUp = async (
   email: string, 
   password: string, 
@@ -48,13 +164,6 @@ export const signUp = async (
   }
 };
 
-/**
- * Sign Up a Helper (Hospital Staff)
- * Structure: 
- * 1. hospitals/{hospitalId} -> Hospital Info
- * 2. hospitals/{hospitalId}/staff/{uid} -> Staff Profile
- * 3. staffRegistry/{uid} -> Quick lookup for hospitalId
- */
 export const signUpHelper = async (
   email: string,
   password: string,
@@ -64,13 +173,11 @@ export const signUpHelper = async (
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // 1. Ensure Hospital document exists
     await setDoc(doc(db, "hospitals", helperData.hospitalId), {
       name: helperData.hospitalName,
       hospitalId: helperData.hospitalId
     }, { merge: true });
 
-    // 2. Save Staff Detail inside the Hospital
     const staffRef = doc(db, "hospitals", helperData.hospitalId, "staff", user.uid);
     await setDoc(staffRef, {
       uid: user.uid,
@@ -80,7 +187,6 @@ export const signUpHelper = async (
       createdAt: Date.now()
     });
 
-    // 3. Create a registry entry for quick lookup during login
     await setDoc(doc(db, "staffRegistry", user.uid), {
       hospitalId: helperData.hospitalId,
       role: 'helper'
@@ -92,9 +198,6 @@ export const signUpHelper = async (
   }
 };
 
-/**
- * Common Sign In
- */
 export const signIn = async (email: string, password: string) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -104,9 +207,6 @@ export const signIn = async (email: string, password: string) => {
   }
 };
 
-/**
- * Sign Out
- */
 export const logOut = async () => {
   try {
     await signOut(auth);
