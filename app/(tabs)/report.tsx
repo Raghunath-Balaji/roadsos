@@ -30,6 +30,7 @@ import { useRouter } from 'expo-router';
 export default function ReportScreen() {
   const [patientName, setPatientName] = useState('');
   const [severity, setSeverity] = useState<AlertSeverity>('medium');
+  const [searchRadius, setSearchRadius] = useState<number>(5);
   const [details, setDetails] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -94,7 +95,8 @@ export default function ReportScreen() {
           longitude: location.coords.longitude,
         },
         details,
-        uploadRes.url!
+        uploadRes.url!,
+        searchRadius
       );
 
       if (result.success) {
@@ -200,6 +202,22 @@ export default function ReportScreen() {
               value={details}
               onChangeText={setDetails}
             />
+          </View>
+
+          {/* Search Radius */}
+          <View>
+            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-3 ml-1">Response Radius</Text>
+            <View className="flex-row gap-2">
+              {[5, 10, 20].map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  onPress={() => setSearchRadius(r)}
+                  className={`flex-1 py-2 rounded-xl items-center border ${searchRadius === r ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-200'}`}
+                >
+                  <Text className={`font-bold text-xs ${searchRadius === r ? 'text-white' : 'text-slate-500'}`}>{r}km</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Submit Button */}

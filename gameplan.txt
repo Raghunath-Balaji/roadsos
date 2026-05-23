@@ -1,4 +1,4 @@
-# Road SOS - Architecture & Implementation Plan
+﻿# Road SOS - Architecture & Implementation Plan
 
 ## Background & Motivation
 Road SOS is a dual-sided React Native mobile application designed for emergency reporting and response. It empowers citizens to report accidents (either for themselves or others) and enables helpers (ambulances, hospitals) to receive these alerts and navigate to the scene. The app integrates Google OAuth, Firebase for real-time data, and a specialized on-device/edge AI bot for First Aid guidance.
@@ -60,5 +60,141 @@ Road SOS is a dual-sided React Native mobile application designed for emergency 
 - Ensure the AI model responds accurately to first-aid scenarios.
 - Verify bystander reports require a photo and show up correctly on the Helper Dashboard without reporter medical history.
 
+-------- sensor logic -----
 
-wuv u
+
+Here is the complete, detailed implementation plan. Because this is an Android-only app, we can leverage Android's Foreground Services and Window Flags to keep the accelerometer
+  alive in the background and forcefully wake the screen when a crash happens.
+
+  To keep the codebase clean, we will let Native Android (Kotlin) handle the background sensor math, and let React Native (JS) handle the UI, sound, timer, and Firebase database
+  writes.
+
+  ---
+
+  Phase 1: Permissions & System Configuration
+  To run in the background and wake the screen, Android requires specific permissions.
+
+  1. app.json
+   * What will be altered: We will add necessary Android permissions and specify the background mode.
+   * Additions: WAKE_LOCK, FOREGROUND_SERVICE, FOREGROUND_SERVICE_SPECIAL_USE (or LOCATION), USE_FULL_SCREEN_INTENT, VIBRATE.
+
+  2. android/app/src/main/AndroidManifest.xml
+   * What will be altered: The core Android manifest file.
+   * Additions:
+       * Register the new CrashService (our background worker).
+       * Add android:showWhenLocked="true" and android:turnScreenOn="true" to your MainActivity so it can bypass the lock screen when a crash is detected.
+
+  Phase 2: The Custom Native Android Module (Kotlin)
+  We will write a small native bridge to poll the accelerometer while the app is minimized.
+
+  3. android/app/src/main/java/com/raghunathbalaji/roadsos/CrashService.kt (NEW FILE)
+   * What it does: This is the Android Foreground Service. It displays a persistent notification ("RoadSOS Drive Mode Active"). It registers a SensorEventListener for the
+     accelerometer.
+   * The Math: It continuously calculates total G-Force: sqrt(xÂ² + yÂ² + zÂ²) / 9.8.
+   * The Trigger: If G-Force > 4.0, it fires an Intent to forcefully launch/wake up MainActivity and sends a Javascript event: CRASH_DETECTED.
+
+  4. android/app/src/main/java/com/raghunathbalaji/roadsos/CrashModule.kt (NEW FILE)
+   * What it does: The bridge between Javascript and Kotlin. It exposes two simple methods to React Native: startMonitoring() and stopMonitoring().
+
+  5. android/app/src/main/java/com/raghunathbalaji/roadsos/MainApplicationPackage.kt (NEW FILE/MODIFIED)
+   * What it does: Registers CrashModule so it can be imported into your React Native Javascript files via NativeModules.
+
+  Phase 3: React Native Bridge & Audio/Haptics
+  Now we connect the native code to your existing Expo app.
+
+  6. package.json
+   * What will be altered: Add expo-av (for the loud alarm sound). You already have expo-haptics.
+
+  7. services/crashDetection.ts (NEW FILE)
+   * What it does: A clean JavaScript wrapper around the native module.
+   * Code logic:
+
+   1     import { NativeModules, NativeEventEmitter } from 'react-native';
+   2     export const startCrashDetection = () => NativeModules.CrashModule.startMonitoring();
+   3     export const stopCrashDetection = () => NativeModules.CrashModule.stopMonitoring();
+   4     // Expose the event emitter to listen for 'CRASH_DETECTED'
+
+  Phase 4: UI & Business Logic (React Native)
+
+  8. app/(tabs)/dashboard.tsx (or Citizen Home Screen)
+   * What will be altered: We will add a prominent "Drive Mode" toggle button.
+   * Logic: When toggled ON, it requests background permissions and calls startCrashDetection(). When OFF, it calls stopCrashDetection().
+   * Event Listener: We will add a useEffect that listens for the CRASH_DETECTED event from the native side. If it fires, it forcefully navigates the user to the crash-alarm
+     screen.
+
+  9. app/crash-alarm.tsx (NEW FILE)
+   * What it does: The full-screen, flashing red modal that appears when a crash is detected.
+   * On Mount:
+       * Triggers expo-haptics to vibrate continuously.
+       * Uses expo-av to play a loud siren sound on a loop.
+       * Starts a strict 30-second countdown timer.
+   * User Action - "I'm OK": Stops the sound/haptics, stops the timer, and navigates back to the dashboard.
+   * Timeout (Timer reaches 0):
+       * Stops the sound/haptics.
+       * Fetches current GPS coordinates.
+       * Calls your existing createAlert(userId, 'high', location) function automatically.
+       * Navigates to the sos.tsx tracking screen so the user can see help is on the way.
+  The Development Flow Change
+  Because we are modifying the android/ directory and writing Kotlin code, you can no longer use the standard "Expo Go" app from the Play Store to test this feature.
+
+  To build and test this, you will need to run:
+  npx expo run:android
+  This requires having Android Studio installed on your computer, or an Android phone plugged in via USB/Wi-Fi debugging, so Expo can compile the custom Kotlin code into a custom
+  .apk for your device.
+
+  Does this architecture look good to you? We can tackle this phase by phase, starting with the Native Android files, if you're ready.
+
+---
+
+# Plan: Implement Drive Mode with Crash Detection
+
+## Objective
+Add a "Drive Mode" feature to the RoadSOS app that tracks real-time accelerometer data to detect sudden surges indicative of a crash. When active, this mode will implement a "soft lock" to prevent accidental exiting via gestures or the back button.
+
+## Prerequisites
+1.  **Install `expo-sensors`**: This package is required to access the device's accelerometer.
+
+## Key Files & Context
+*   **`package.json`**: Needs to be updated with the `expo-sensors` dependency.
+*   **`app/(tabs)/_layout.tsx`** or a global context/provider: To manage the global state of "Drive Mode".
+*   **`app/(tabs)/sos.tsx`** (or whichever is the primary citizen screen): To add the UI toggle for "Drive Mode".
+*   **New Component: `components/DriveModeOverlay.tsx`**: A full-screen or prominent overlay that appears when Drive Mode is active, handling the "soft lock" and displaying status.
+*   **New Service: `services/crashDetection.ts`**: To encapsulate the accelerometer logic and threshold calculations.
+
+## Implementation Steps
+
+### Phase 1: Setup & Service Creation
+1.  **Install Dependency**: Run `npx expo install expo-sensors`.
+2.  **Create `crashDetection.ts`**:
+    *   Import `Accelerometer` from `expo-sensors`.
+    *   Set the update interval (e.g., 100ms) for high-frequency tracking.
+    *   Implement logic to calculate the total G-force from x, y, and z axes: `Math.sqrt(x*x + y*y + z*z)`.
+    *   Define a standard crash threshold (e.g., ~4G).
+    *   Create a subscription mechanism to notify the UI when a crash is detected.
+
+### Phase 2: State Management & UI Toggle
+1.  **Global State**: Implement a way to track if `isDriveModeActive` is true (using React Context or a simple state lifted to a high enough level).
+2.  **Drive Mode Button**: Add a persistent, easily accessible button (e.g., a Floating Action Button or a bottom-right popup as requested) on the main user dashboard (`sos.tsx` or similar) to toggle `isDriveModeActive`.
+
+### Phase 3: Drive Mode Overlay & Soft Lock
+1.  **Create `DriveModeOverlay.tsx`**:
+    *   This component will render conditionally based on `isDriveModeActive`.
+    *   It should cover the screen to prevent interaction with underlying elements.
+    *   Implement a visual indicator that Drive Mode is active and monitoring.
+    *   Provide a secure way to exit Drive Mode (e.g., a "Slide to Unlock" or "Hold to Exit" button) to prevent accidental closure.
+2.  **Implement Soft Lock**:
+    *   Use React Native's `BackHandler` to intercept hardware back button presses on Android and prevent the app from minimizing or going back.
+    *   If using React Navigation, ensure swipe-to-go-back gestures are disabled for the screen hosting the overlay.
+
+### Phase 4: Integration & Crash Response
+1.  **Start/Stop Tracking**: When Drive Mode is activated, start the `Accelerometer` subscription in `crashDetection.ts`. When deactivated, stop it to save battery.
+2.  **Handle Crash Event**: When the service detects a surge exceeding the threshold:
+    *   Trigger an immediate alert in the UI (e.g., a loud sound or red flashing screen).
+    *   Initiate a countdown (e.g., 10 seconds). If the user doesn't cancel it, automatically trigger the SOS flow.
+
+## Verification & Testing
+1.  Verify `expo-sensors` installs correctly and the app builds.
+2.  Test the "Soft Lock" to ensure the back button and gestures do not close the Drive Mode overlay accidentally.
+3.  Simulate a crash by physically moving the device rapidly (safely!) while connected to the debugger to verify the G-force calculation and threshold triggering.
+4.  Ensure the Accelerometer stops tracking when Drive Mode is disabled.
+

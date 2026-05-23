@@ -53,3 +53,363 @@
     }
   }
 }
+
+
+Here is the complete, detailed implementation plan. Because this is an Android-only app, we can leverage Android's Foreground Services and Window Flags to keep the accelerometer
+  alive in the background and forcefully wake the screen when a crash happens.
+
+  To keep the codebase clean, we will let Native Android (Kotlin) handle the background sensor math, and let React Native (JS) handle the UI, sound, timer, and Firebase database
+  writes.
+
+  ---
+
+  Phase 1: Permissions & System Configuration
+  To run in the background and wake the screen, Android requires specific permissions.
+
+  1. app.json
+   * What will be altered: We will add necessary Android permissions and specify the background mode.
+   * Additions: WAKE_LOCK, FOREGROUND_SERVICE, FOREGROUND_SERVICE_SPECIAL_USE (or LOCATION), USE_FULL_SCREEN_INTENT, VIBRATE.
+
+  2. android/app/src/main/AndroidManifest.xml
+   * What will be altered: The core Android manifest file.
+   * Additions:
+       * Register the new CrashService (our background worker).
+       * Add android:showWhenLocked="true" and android:turnScreenOn="true" to your MainActivity so it can bypass the lock screen when a crash is detected.
+
+  Phase 2: The Custom Native Android Module (Kotlin)
+  We will write a small native bridge to poll the accelerometer while the app is minimized.
+
+  3. android/app/src/main/java/com/raghunathbalaji/roadsos/CrashService.kt (NEW FILE)
+   * What it does: This is the Android Foreground Service. It displays a persistent notification ("RoadSOS Drive Mode Active"). It registers a SensorEventListener for the
+     accelerometer.
+   * The Math: It continuously calculates total G-Force: sqrt(x² + y² + z²) / 9.8.
+   * The Trigger: If G-Force > 4.0, it fires an Intent to forcefully launch/wake up MainActivity and sends a Javascript event: CRASH_DETECTED.
+
+  4. android/app/src/main/java/com/raghunathbalaji/roadsos/CrashModule.kt (NEW FILE)
+   * What it does: The bridge between Javascript and Kotlin. It exposes two simple methods to React Native: startMonitoring() and stopMonitoring().
+
+  5. android/app/src/main/java/com/raghunathbalaji/roadsos/MainApplicationPackage.kt (NEW FILE/MODIFIED)
+   * What it does: Registers CrashModule so it can be imported into your React Native Javascript files via NativeModules.
+
+  Phase 3: React Native Bridge & Audio/Haptics
+  Now we connect the native code to your existing Expo app.
+
+  6. package.json
+   * What will be altered: Add expo-av (for the loud alarm sound). You already have expo-haptics.
+
+  7. services/crashDetection.ts (NEW FILE)
+   * What it does: A clean JavaScript wrapper around the native module.
+   * Code logic:
+
+   1     import { NativeModules, NativeEventEmitter } from 'react-native';
+   2     export const startCrashDetection = () => NativeModules.CrashModule.startMonitoring();
+   3     export const stopCrashDetection = () => NativeModules.CrashModule.stopMonitoring();
+   4     // Expose the event emitter to listen for 'CRASH_DETECTED'
+
+  Phase 4: UI & Business Logic (React Native)
+
+  8. app/(tabs)/dashboard.tsx (or Citizen Home Screen)
+   * What will be altered: We will add a prominent "Drive Mode" toggle button.
+   * Logic: When toggled ON, it requests background permissions and calls startCrashDetection(). When OFF, it calls stopCrashDetection().
+   * Event Listener: We will add a useEffect that listens for the CRASH_DETECTED event from the native side. If it fires, it forcefully navigates the user to the crash-alarm
+     screen.
+
+  9. app/crash-alarm.tsx (NEW FILE)
+   * What it does: The full-screen, flashing red modal that appears when a crash is detected.
+   * On Mount:
+       * Triggers expo-haptics to vibrate continuously.
+       * Uses expo-av to play a loud siren sound on a loop.
+       * Starts a strict 30-second countdown timer.
+   * User Action - "I'm OK": Stops the sound/haptics, stops the timer, and navigates back to the dashboard.
+   * Timeout (Timer reaches 0):
+       * Stops the sound/haptics.
+       * Fetches current GPS coordinates.
+       * Calls your existing createAlert(userId, 'high', location) function automatically.
+       * Navigates to the sos.tsx tracking screen so the user can see help is on the way.
+  The Development Flow Change
+  Because we are modifying the android/ directory and writing Kotlin code, you can no longer use the standard "Expo Go" app from the Play Store to test this feature.
+
+  To build and test this, you will need to run:
+  npx expo run:android
+  This requires having Android Studio installed on your computer, or an Android phone plugged in via USB/Wi-Fi debugging, so Expo can compile the custom Kotlin code into a custom
+  .apk for your device.
+
+  Does this architecture look good to you? We can tackle this phase by phase, starting with the Native Android files, if you're ready.
+
+
+
+
+----chat----
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { ChatMessage, getChatResponse, getUserMedicalInfo } from '../../services/chatservice';
+
+const Chatbot = () => {
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [inputText, setInputText] = useState('');
+    const [medicalInfo, setMedicalInfo] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+
+
+    useEffect(() => {
+        loadMedicalInfo();
+    }, []);
+
+    const loadMedicalInfo = async () => {
+        const info = await getUserMedicalInfo();
+        setMedicalInfo(info);
+
+        // Initial greeting
+        setMessages([
+            {
+                role: 'assistant',
+                content: `Hello ${info?.name || 'there'}! I am your RoadSOS First Aid Assistant. How can I help you today?`
+            }
+        ]);
+    };
+
+    const handleSend = async () => {
+        if (inputText.trim() === '' || loading) return;
+
+        const userMessage: ChatMessage = { role: 'user', content: inputText };
+        const updatedMessages = [...messages, userMessage];
+
+        setMessages(updatedMessages);
+        setInputText('');
+        setLoading(true);
+
+        // Get response from service
+        const response = await getChatResponse(updatedMessages, medicalInfo);
+
+        setMessages([...updatedMessages, { role: 'assistant', content: response }]);
+        setLoading(false);
+
+        // Scroll to bottom
+
+    };
+
+    const renderMessage = ({ item }: { item: ChatMessage }) => (
+        <View className={`mb-4 max-w-[85%] ${item.role === 'user' ? 'self-end' : 'self-start'}`}>
+            <View className={`p-4 rounded-2xl ${
+                item.role === 'user'
+                    ? 'bg-red-600 rounded-tr-none'
+                    : 'bg-gray-100 border border-gray-200 rounded-tl-none'
+            }`}>
+                <Text className={`${item.role === 'user' ? 'text-white font-medium' : 'text-gray-800'} text-base leading-6`}>
+                    {item.content}
+                </Text>
+            </View>
+        </View>
+    );
+
+    return (
+        <SafeAreaView
+            style={{
+                flex: 1,
+                backgroundColor: 'white',
+            }}
+        >
+
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                className="flex-1"
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+            >
+                <View style={{ flex: 1, paddingHorizontal: 16 }}>
+                    {/* Header */}
+                    <View className="py-4 border-b border-gray-100 flex-row items-center">
+                        <View className="w-10 h-10 bg-red-100 rounded-full items-center justify-center mr-3">
+                            <Ionicons name="medical" size={20} color="#dc2626" />
+                        </View>
+                        <View>
+                            <Text className="text-xl font-bold text-gray-900">First Aid AI</Text>
+                            <Text className="text-xs text-gray-500">Always active for your safety</Text>
+                        </View>
+                    </View>
+
+                    {/* Alert Message */}
+                    <View className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 flex-row items-start">
+                        <Ionicons name="warning" size={18} color="#dc2626" className="mr-2" />
+                        <Text className="text-xs text-red-800 flex-1 ml-2">
+                            <Text className="font-bold">Disclaimer:</Text> This AI provides first-aid guidance based on your medical profile. For severe emergencies, call emergency services immediately. AI can make mistakes! this is ONLY for peripheral advice
+                        </Text>
+                    </View>
+
+                    {/* Chat area */}
+
+                    <ScrollView
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{
+                            paddingTop: 20,
+                            paddingBottom: 120,
+                        }}
+                        nestedScrollEnabled={true}
+                        showsVerticalScrollIndicator={true}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {messages.map((item, index) => (
+                            <View key={index}>
+                                {renderMessage({ item })}
+                            </View>
+                        ))}
+                    </ScrollView>
+
+                    {loading && (
+                        <View className="flex-row items-center mb-6 ml-2">
+                            <ActivityIndicator size="small" color="#dc2626" />
+                            <Text className="ml-2 text-gray-400 text-sm italic">AI is generating first-aid steps...</Text>
+                        </View>
+                    )}
+
+                    {/* Input Area */}
+                    <View className="pb-4 pt-2">
+                        <View className="flex-row items-end bg-gray-50 rounded-3xl px-4 py-2 border border-gray-200">
+                            <TextInput
+                                className="flex-1 text-base text-gray-800 py-2 max-h-32"
+                                placeholder="Describe the medical situation..."
+                                placeholderTextColor="#94a3b8"
+                                value={inputText}
+                                onChangeText={setInputText}
+                                multiline={false}
+                                returnKeyType="send"
+                                onSubmitEditing={handleSend}
+                            />
+                            <TouchableOpacity
+                                onPress={handleSend}
+                                disabled={loading || inputText.trim() === ''}
+                                className={`ml-2 w-10 h-10 rounded-full items-center justify-center ${
+                                    inputText.trim() === '' ? 'bg-gray-200' : 'bg-red-600'
+                                }`}
+                            >
+                                <Ionicons
+                                    name="arrow-up"
+                                    size={24}
+                                    color="white"
+                                />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
+    );
+};
+
+export default Chatbot;
+
+---- chatbot again
+    const setupAI = async () => {
+        try {
+            // Load medical info
+            const info = await getUserMedicalInfo();
+            setMedicalInfo(info);
+
+            // Initial greeting
+            setMessages([
+                {
+                    role: 'assistant',
+                    content: `Hello ${info?.name || 'there'}! I am your RoadSOS Local First Aid Assistant. I'm currently initializing my offline medical database...`
+                }
+            ]);
+
+            // Initialize Local Llama using Native Asset
+            console.log("Attempting to load model from assets: model.gguf");
+            const ctx = await initLlama({
+                model: 'model.gguf',
+                is_model_asset: true,
+                use_mlock: false, // Disable memory locking to prevent OS-level permission failures
+                use_mmap: false,   // Use memory mapping for efficient loading
+                n_ctx: 512,      // Slightly reduced context for better stability
+                n_threads: 2,
+            });
+            console.log("checkpoint - 1 - init llama function, referenced model.gguf without compression from assets")
+            setContext(ctx);
+            setModelLoading(false);
+
+            setMessages(prev => [
+                ...prev,
+                {
+                    role: 'assistant',
+                    content: "Local AI is ready! I can now provide first-aid guidance even without internet. How can I help you?"
+                }
+            ]);
+        } catch (error) {
+            console.error("Llama Init Error:", error);
+            setModelLoading(false);
+            setMessages(prev => [
+                ...prev,
+                {
+                    role: 'assistant',
+                    content: "I encountered an error loading the local model. Please ensure the app has enough memory."
+                }
+            ]);
+        }
+    };
+
+
+
+---- setupai
+const setupAI = async () => {
+
+        try {
+            console.log('initLlama function:', typeof initLlama);
+            const info = await getUserMedicalInfo();
+            setMedicalInfo(info);
+
+            setMessages([{
+                role: 'assistant',
+                content: `Hello ${info?.name || 'there'}! Initializing offline AI...`
+            }]);
+
+            // Copy model from assets to document directory
+            //const destFile = new File(Paths.document, 'model.gguf');
+
+            // if (!destFile.exists) {
+            //     console.log('Copying model...');
+            //     console.log('=== MODEL DEBUG ===');
+            //     console.log('destFile.uri:', destFile.uri);
+            //     console.log('destFile.exists:', destFile.exists);
+            //     console.log('destFile.size:', destFile.size);
+            //     console.log('===================');
+            //     const response = await fetch('asset:///model.gguf');
+            //     const blob = await response.blob();
+            //     const buffer = await blob.arrayBuffer();
+            //     await destFile.write(new Uint8Array(buffer)); // writes bytes directly
+            //     console.log('Model copied successfully');
+            // } else {
+            //     console.log('Model already exists at:', destFile.uri);
+            // }
+
+            //console.log('Initializing llama with path:', destFile.uri);
+            const ctx = await initLlama({
+                model: '/data/local/tmp/model.gguf',
+                is_model_asset: false,
+                use_mlock: false,
+                use_mmap: true,
+                n_ctx: 512,
+                n_threads: 2,
+            });
+
+            setContext(ctx);
+            setModelLoading(false);
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: "Local AI is ready! How can I help you?"
+            }]);
+
+        } catch (error) {
+            console.error("Llama Init Error:", error);
+            setModelLoading(false);
+        }
+    };

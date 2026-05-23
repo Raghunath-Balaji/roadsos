@@ -8,10 +8,6 @@ interface LeafletMapProps {
   zoom?: number;
 }
 
-/**
- * A truly free Map component using Leaflet and OpenStreetMap.
- * Requires no API keys or Google Cloud Billing.
- */
 const LeafletMap: React.FC<LeafletMapProps> = ({ latitude, longitude, zoom = 15 }) => {
   const htmlContent = `
     <!DOCTYPE html>
@@ -52,15 +48,15 @@ const LeafletMap: React.FC<LeafletMapProps> = ({ latitude, longitude, zoom = 15 
   `;
 
   return (
-    <View style={styles.container}>
-      <WebView
-        originWhitelist={['*']}
-        source={{ html: htmlContent }}
-        style={styles.map}
-        scrollEnabled={false}
-        zoomEnabled={false}
-      />
-    </View>
+      <View style={styles.container}>
+        <WebView
+            originWhitelist={['*']}
+            source={{ html: htmlContent }}
+            style={styles.map}
+            scrollEnabled={false}
+            zoomEnabled={false}
+        />
+      </View>
   );
 };
 

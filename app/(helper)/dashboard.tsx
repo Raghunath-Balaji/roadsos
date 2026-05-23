@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, ScrollView, Alert, Modal, Image, Dimensions } from 'react-native';
 import LeafletMap from '../LeafletMap';
 import { auth, db } from '../../config/firebase';
@@ -8,6 +8,8 @@ import { listenToActiveAlerts, ActiveAlert, acceptAlert } from '../../services/a
 import { UserProfile } from '../../services/authService';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import { calculateDistance } from '../../services/haversine';
 
 const { width } = Dimensions.get('window');
 
@@ -18,12 +20,64 @@ const { width } = Dimensions.get('window');
 export default function HelperDashboard() {
   const [hospitalInfo, setHospitalInfo] = useState<any>(null);
   const [staffInfo, setStaffInfo] = useState<any>(null);
-  const [activeAlerts, setActiveAlerts] = useState<ActiveAlert[]>([]);
+  const [rawAlerts, setRawAlerts] = useState<ActiveAlert[]>([]);
+  const [helperLocation, setHelperLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [patientInfo, setPatientInfo] = useState<{ [key: string]: UserProfile }>({});
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<ActiveAlert | null>(null);
   const router = useRouter();
+
+  /**
+   * Watch helper's live location
+   */
+  useEffect(() => {
+    let locationSubscription: any;
+
+    const startWatching = async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert("Permission Denied", "Location access is required to receive local alerts.");
+        return;
+      }
+
+      locationSubscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          distanceInterval: 10, // Update every 10 meters
+        },
+        (location) => {
+          setHelperLocation({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+        }
+      );
+    };
+
+    startWatching();
+    return () => locationSubscription?.remove();
+  }, []);
+
+  /**
+   * Compute filtered alerts based on geofencing
+   */
+  const activeAlerts = useMemo(() => {
+    if (!helperLocation) return [];
+
+    return rawAlerts.filter(alert => {
+      const distance = calculateDistance(
+        helperLocation.latitude,
+        helperLocation.longitude,
+        alert.location.latitude,
+        alert.location.longitude
+      );
+      
+      // If alert doesn't have a search radius, default to 5km
+      const radius = alert.searchRadiusKm || 5;
+      return distance <= radius;
+    });
+  }, [rawAlerts, helperLocation]);
 
   /**
    * Fetch both the staff member's individual info and their shared hospital data.
@@ -63,7 +117,7 @@ export default function HelperDashboard() {
 
     // Start listening to active alerts
     const unsubscribe = listenToActiveAlerts((alerts) => {
-      setActiveAlerts(alerts);
+      setRawAlerts(alerts);
     });
 
     return () => unsubscribe();

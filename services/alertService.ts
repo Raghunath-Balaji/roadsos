@@ -24,6 +24,7 @@ export interface ActiveAlert {
   imageUrl?: string;
   isBystanderReport?: boolean;
   reportedPatientName?: string;
+  searchRadiusKm?: number;
 }
 
 /**
@@ -85,7 +86,8 @@ export const updateAlertDetails = async (
 export const createAlert = async (
   userId: string,
   severity: AlertSeverity,
-  location: LocationData
+  location: LocationData,
+  searchRadiusKm: number = 5
 ) => {
   try {
     // Create references with the same ID for both locations
@@ -99,6 +101,7 @@ export const createAlert = async (
       status: 'pending',
       helperId: null,
       timestamp: serverTimestamp(),
+      searchRadiusKm,
     };
 
     // Use a batch to ensure atomicity across both collections
@@ -124,7 +127,8 @@ export const createBystanderAlert = async (
   severity: AlertSeverity,
   location: LocationData,
   details: string,
-  imageUrl: string
+  imageUrl: string,
+  searchRadiusKm: number = 5
 ) => {
   try {
     const liveAlertRef = doc(collection(db, "liveAlerts"));
@@ -140,6 +144,7 @@ export const createBystanderAlert = async (
       status: 'pending',
       helperId: null,
       timestamp: serverTimestamp(),
+      searchRadiusKm,
     };
 
     await setDoc(liveAlertRef, alertData);
