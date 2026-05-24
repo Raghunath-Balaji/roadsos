@@ -40,6 +40,8 @@
       "expo-location",
       "expo-av",
       "expo-sensors",
+      "expo-document-picker",
+      "expo-font",
       [
         "expo-splash-screen",
         {
@@ -59,7 +61,8 @@
           "forceCxx20": true,
           "enableOpenCLAndHexagon": true
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

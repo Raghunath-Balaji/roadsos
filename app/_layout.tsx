@@ -5,6 +5,18 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import "../globals.css";
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { 
+  useFonts, 
+  IBMPlexSans_400Regular, 
+  IBMPlexSans_500Medium, 
+  IBMPlexSans_600SemiBold, 
+  IBMPlexSans_700Bold 
+} from '@expo-google-fonts/ibm-plex-sans';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 /**
  * RootLayout acts as the central gatekeeper for the application.
@@ -15,8 +27,24 @@ export default function RootLayout() {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<'citizen' | 'helper' | 'admin' | null>(null);
   
+  const [fontsLoaded, fontError] = useFonts({
+    IBMPlexSans_400Regular,
+    IBMPlexSans_500Medium,
+    IBMPlexSans_600SemiBold,
+    IBMPlexSans_700Bold,
+  });
+
   const router = useRouter();
   const segments = useSegments();
+
+  /**
+   * Hide splash screen once fonts are ready
+   */
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
 
   /**
    * Listen for changes in the user's authentication state and fetch their role.
@@ -62,7 +90,7 @@ export default function RootLayout() {
    * Handles redirection based on auth state and user role.
    */
   useEffect(() => {
-    if (initializing) return;
+    if (initializing || !fontsLoaded) return;
 
     const currentSegment = segments[0];
     const isInsideAuth = currentSegment === '(auth)';
@@ -102,10 +130,15 @@ export default function RootLayout() {
         router.replace('/(admin)/dashboard');
       }
     }
-  }, [user, userRole, initializing, segments]);
+  }, [user, userRole, initializing, segments, fontsLoaded]);
+
+  if (!fontsLoaded && !fontError) {
+    // Return the stack anyway but it will be hidden by the splash screen
+    // This ensures navigation context is available for any early hooks
+  }
 
   return (
-    <>
+    <SafeAreaProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
@@ -113,7 +146,9 @@ export default function RootLayout() {
         <Stack.Screen name="(helper)" />
         <Stack.Screen name="(admin)" />
       </Stack>
-      <StatusBar style="auto" />
-    </>
+      <StatusBar style="light" />
+    </SafeAreaProvider>
   );
 }
+
+

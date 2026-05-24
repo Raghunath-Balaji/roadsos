@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
 import React, { useEffect, useState, useRef } from "react";
-import { SafeAreaView, Text, TouchableOpacity, View, Animated } from "react-native";
+import { Text, TouchableOpacity, View, Animated } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import "../globals.css";
 
 /**
@@ -71,7 +72,7 @@ export default function App() {
                     <Text className="text-4xl font-black text-slate-900 tracking-tighter">RoadSOS</Text>
                     <View className="h-1 w-12 bg-blue-600 rounded-full my-3" />
                     <Text className="text-slate-500 text-center font-medium leading-5 px-4">
-                        Universal emergency response and local first-aid intelligence.
+                        Common login page for prototyping purposes, Citizen login, responder login, and organization admin login
                     </Text>
                 </View>
 
@@ -89,7 +90,7 @@ export default function App() {
                             </View>
                             <View className="flex-1">
                                 <Text className="text-white text-lg font-bold">Citizen Portal</Text>
-                                <Text className="text-blue-100 text-xs">I need emergency help</Text>
+                                <Text className="text-blue-100 text-xs">Login with a general public account</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color="white" opacity={0.6} />
                         </TouchableOpacity>
@@ -106,7 +107,7 @@ export default function App() {
                             </View>
                             <View className="flex-1">
                                 <Text className="text-white text-lg font-bold">Responder Login</Text>
-                                <Text className="text-emerald-100 text-xs">Active mission dashboard</Text>
+                                <Text className="text-emerald-100 text-xs">Helper dashboard</Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color="white" opacity={0.6} />
                         </TouchableOpacity>
@@ -123,7 +124,8 @@ export default function App() {
                             </View>
                             <View className="flex-1">
                                 <Text className="text-white text-lg font-bold">Organization Admin</Text>
-                                <Text className="text-slate-400 text-xs">Manage medical units</Text>
+                                <Text className="text-slate-400 text-xs">Manage helpers through admin portals
+                                </Text>
                             </View>
                             <Ionicons name="chevron-forward" size={20} color="white" opacity={0.6} />
                         </TouchableOpacity>

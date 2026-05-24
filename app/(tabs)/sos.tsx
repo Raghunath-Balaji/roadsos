@@ -1,14 +1,16 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Alert, ActivityIndicator, StyleSheet, Animated, Easing, TextInput, Image, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, ActivityIndicator, StyleSheet, Animated, Easing, TextInput, Image, ScrollView, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { auth } from '../../config/firebase';
 import { createAlert, AlertSeverity, listenToMyAlert, ActiveAlert, markAsSaved, uploadAlertImage, updateAlertDetails } from '../../services/alertService';
 import { Ionicons } from '@expo/vector-icons';
+import SOSMap from '../../components/SOSMap';
+import { LinearGradient } from 'expo-linear-gradient';
 
-/**
- * Radar Animation Component
- */
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const RadarAnimation = () => {
   const scaleValue = useRef(new Animated.Value(0)).current;
   const opacityValue = useRef(new Animated.Value(1)).current;
@@ -31,7 +33,6 @@ const RadarAnimation = () => {
         }),
       ]).start(() => animate());
     };
-
     animate();
   }, []);
 
@@ -46,8 +47,8 @@ const RadarAnimation = () => {
               },
             ]}
         />
-        <View className="bg-red-500 w-16 h-16 rounded-full items-center justify-center z-10 shadow-lg shadow-red-500/50">
-          <Ionicons name="radio" size={32} color="white" />
+        <View className="bg-brand-vivid w-16 h-16 rounded-full items-center justify-center z-10 shadow-lg shadow-brand-vivid/50">
+          <Ionicons name="radio" size={32} color="black" />
         </View>
       </View>
   );
@@ -58,22 +59,34 @@ export default function SosScreen() {
   const [updating, setUpdating] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [activeAlert, setActiveAlert] = useState<ActiveAlert | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null);
 
-  // Optional details state
   const [details, setDetails] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
-      setLocationPermission(status === 'granted');
+      const granted = status === 'granted';
+      setLocationPermission(granted);
+
+      if (granted) {
+        try {
+          const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          setCurrentLocation({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude
+          });
+        } catch (e) {
+          console.error("Location Fetch Error:", e);
+        }
+      }
     })();
 
     const user = auth.currentUser;
     if (user) {
       const unsubscribe = listenToMyAlert(user.uid, (alert) => {
         setActiveAlert(alert);
-        // Reset local form if no active alert or alert changed
         if (!alert) {
           setDetails('');
           setImageUri(null);
@@ -85,88 +98,51 @@ export default function SosScreen() {
 
   const handleSosPress = async (severity: AlertSeverity) => {
     if (!locationPermission) {
-      Alert.alert(
-          "Permission Denied",
-          "Location access is required to send an SOS alert. Please enable it in your settings."
-      );
+      Alert.alert("Permission Denied", "Location access is required for SOS.");
       return;
     }
-
     const user = auth.currentUser;
-    if (!user) {
-      Alert.alert("Authentication Error", "You must be logged in to send an alert.");
-      return;
-    }
+    if (!user) return;
 
     setLoading(true);
-
     try {
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const result = await createAlert(user.uid, severity, {
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      await createAlert(user.uid, severity, {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
-
-      if (!result.success) {
-        Alert.alert("Error", "Failed to send alert: " + result.error);
-      }
     } catch (error: any) {
-      console.error("SOS Press Error:", error);
-      Alert.alert("Error", "An unexpected error occurred while sending the alert.");
+      Alert.alert("Error", "SOS Broadcast Failed.");
     } finally {
       setLoading(false);
     }
   };
 
   const takePhoto = async () => {
-    // Request camera permissions
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert("Permission Denied", "We need camera access to take incident photos.");
-      return;
-    }
-
+    if (status !== 'granted') return;
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.7,
     });
-
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
-    }
+    if (!result.canceled) setImageUri(result.assets[0].uri);
   };
 
   const handleUpdateDetails = async () => {
     if (!activeAlert) return;
-    if (!details.trim() && !imageUri) {
-      Alert.alert("No information", "Please add some text or a photo first.");
-      return;
-    }
-
     setUpdating(true);
     try {
       let imageUrl = activeAlert.imageUrl;
-
       if (imageUri && imageUri !== activeAlert.imageUrl) {
         const uploadRes = await uploadAlertImage(imageUri, activeAlert.id, activeAlert.userId);
-        if (uploadRes.success) {
-          imageUrl = uploadRes.url;
-        } else {
-          throw new Error(uploadRes.error);
-        }
+        if (uploadRes.success) imageUrl = uploadRes.url;
       }
-
-      const updateRes = await updateAlertDetails(activeAlert.id, activeAlert.userId, details, imageUrl);
-      if (updateRes.success) {
-        Alert.alert("Updated", "Additional details sent to responders.");
-      }
+      await updateAlertDetails(activeAlert.id, activeAlert.userId, details, imageUrl);
+      Alert.alert("Updated", "Responder intel synced.");
     } catch (error: any) {
-      Alert.alert("Update Failed", error.message);
+      Alert.alert("Error", "Update failed.");
     } finally {
       setUpdating(false);
     }
@@ -174,15 +150,11 @@ export default function SosScreen() {
 
   const handleMarkAsSaved = async () => {
     if (!activeAlert) return;
-
     setLoading(true);
     try {
-      const result = await markAsSaved(activeAlert.id, activeAlert.userId);
-      if (result.success) {
-        Alert.alert("Glad you're safe!", "The emergency request has been cleared.");
-      }
+      await markAsSaved(activeAlert.id, activeAlert.userId);
     } catch (error) {
-      Alert.alert("Error", "Failed to resolve alert.");
+      Alert.alert("Error", "Resolution failed.");
     } finally {
       setLoading(false);
     }
@@ -190,54 +162,41 @@ export default function SosScreen() {
 
   if (locationPermission === false) {
     return (
-        <View className="flex-1 justify-center items-center bg-white p-6">
-          <Ionicons name="location-outline" size={64} color="#ef4444" />
-          <Text className="text-xl font-bold text-slate-800 text-center mt-4">Location Access Required</Text>
-          <Text className="text-slate-500 text-center mt-2">
-            We need your location to send emergency services to your exact position.
-          </Text>
+        <View className="flex-1 justify-center items-center bg-black p-6">
+          <Ionicons name="location-outline" size={64} color="#ee6c4d" />
+          <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-xl text-white text-center mt-4 uppercase">No Surveillance Access</Text>
         </View>
     );
   }
 
-  // Tracking UI (Active Alert exists)
   if (activeAlert) {
     const isPending = activeAlert.status === 'pending';
-    const createdAt = activeAlert.timestamp ? activeAlert.timestamp.toDate().toLocaleTimeString() : 'Processing...';
     const acceptedAt = activeAlert.acceptedAt ? activeAlert.acceptedAt.toDate().toLocaleTimeString() : null;
 
     return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            className="flex-1 bg-white"
-        >
-          <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24 }}>
-            <View className="mt-8 items-center">
-              <Text className="text-2xl font-bold text-slate-900 mb-2">Emergency Tracking</Text>
-              <View className={`px-4 py-1 rounded-full ${isPending ? 'bg-amber-100' : 'bg-emerald-100'}`}>
-                <Text className={`font-bold uppercase text-xs ${isPending ? 'text-amber-700' : 'text-emerald-700'}`}>
-                  Status: {activeAlert.status}
-                </Text>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 bg-black">
+          <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: 60 }}>
+            <View className="items-center mb-8">
+              <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-2xl text-white mb-2 uppercase tracking-tighter">Tracking Protocol</Text>
+              <View className={`px-4 py-1 rounded-lg border ${isPending ? 'border-brand-vivid bg-brand-vivid/10' : 'border-green-500 bg-green-500/10'}`}>
+                <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className={`uppercase text-[10px] tracking-widest ${isPending ? 'text-brand-vivid' : 'text-green-500'}`}>{activeAlert.status}</Text>
               </View>
             </View>
 
-            <View className="flex-1 justify-center py-6">
+            <View className="flex-1 justify-center mb-10">
               {isPending ? (
                   <View>
                     <RadarAnimation />
-                    <Text className="text-center text-slate-600 font-medium mt-4 mb-8">
-                      Waiting for emergency service to accept...
-                    </Text>
+                    <Text style={{ fontFamily: 'IBMPlexSans_500Medium' }} className="text-center text-brand-muted text-sm uppercase tracking-widest mt-6">Awaiting Command...</Text>
 
-                    {/* Additional Details Form */}
                     {(!activeAlert.additionalDetails || !activeAlert.imageUrl) && (
-                        <View className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                          <Text className="text-slate-900 font-bold mb-4">Provide more details (Optional)</Text>
-
+                        <View className="mt-8 bg-brand-card p-6 rounded-[32px] border border-brand-border">
                           {!activeAlert.additionalDetails && (
                               <TextInput
-                                  className="bg-white border border-slate-200 rounded-xl p-4 text-slate-900 mb-4 min-h-[80px]"
-                                  placeholder="Describe the situation or symptoms..."
+                                  style={{ fontFamily: 'IBMPlexSans_500Medium', color: '#ffffff' }}
+                                  className="bg-black border border-brand-border rounded-2xl p-5 mb-5 min-h-[100px]"
+                                  placeholder="Describe incident situation..."
+                                  placeholderTextColor="#444444"
                                   multiline
                                   value={details}
                                   onChangeText={setDetails}
@@ -247,17 +206,17 @@ export default function SosScreen() {
                           {!activeAlert.imageUrl && (
                               <TouchableOpacity
                                   onPress={takePhoto}
-                                  className="bg-white border border-dashed border-slate-300 rounded-xl p-4 items-center mb-4"
+                                  className="bg-black border border-dashed border-brand-border rounded-2xl p-5 items-center mb-5"
                               >
                                 {imageUri ? (
                                     <View className="items-center">
-                                      <Image source={{ uri: imageUri }} className="w-20 h-20 rounded-lg mb-2" />
-                                      <Text className="text-blue-600 font-medium text-xs">Retake Photo</Text>
+                                      <Image source={{ uri: imageUri }} className="w-24 h-24 rounded-xl mb-2" />
+                                      <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-vivid text-[10px] uppercase">Retake Incident Photo</Text>
                                     </View>
                                 ) : (
                                     <View className="items-center">
-                                      <Ionicons name="camera" size={24} color="#94a3b8" />
-                                      <Text className="text-slate-400 font-medium text-xs mt-1">Take Photo</Text>
+                                      <Ionicons name="camera-outline" size={32} color="#777777" />
+                                      <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase mt-2">Capture Visual Evidence</Text>
                                     </View>
                                 )}
                               </TouchableOpacity>
@@ -266,153 +225,99 @@ export default function SosScreen() {
                           <TouchableOpacity
                               onPress={handleUpdateDetails}
                               disabled={updating}
-                              className="bg-blue-600 py-3 rounded-xl items-center"
+                              className="bg-brand-vivid py-4 rounded-2xl items-center shadow-lg shadow-brand-vivid/20"
                           >
-                            {updating ? (
-                                <ActivityIndicator color="white" size="small" />
-                            ) : (
-                                <Text className="text-white font-bold">Update Alert</Text>
-                            )}
+                            {updating ? <ActivityIndicator color="black" /> : <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-black uppercase tracking-widest">Dispatch Intel</Text>}
                           </TouchableOpacity>
-                        </View>
-                    )}
-
-                    {/* Show sent info if exists */}
-                    {(activeAlert.additionalDetails || activeAlert.imageUrl) && (
-                        <View className="mt-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                          <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Attached Info</Text>
-                          {activeAlert.additionalDetails && (
-                              <Text className="text-slate-700 leading-5 mb-3">{activeAlert.additionalDetails}</Text>
-                          )}
-                          {activeAlert.imageUrl && (
-                              <Image source={{ uri: activeAlert.imageUrl }} className="w-full h-40 rounded-xl" />
-                          )}
                         </View>
                     )}
                   </View>
               ) : (
-                  <View className="bg-slate-50 p-8 rounded-[40px] border border-slate-100 items-center">
-                    <View className="w-20 h-20 bg-emerald-100 rounded-full items-center justify-center mb-6">
-                      <Ionicons name="shield-checkmark" size={40} color="#10b981" />
+                  <View className="bg-brand-card p-8 rounded-[40px] border border-brand-border items-center">
+                    <View className="w-24 h-24 bg-green-500/10 rounded-full items-center justify-center mb-6 border border-green-500/30">
+                      <Ionicons name="shield-checkmark" size={48} color="#22c55e" />
                     </View>
-                    <Text className="text-2xl font-bold text-slate-900 text-center mb-2">Help is on the way!</Text>
-                    <Text className="text-slate-500 text-center mb-8">
-                      {activeAlert.doctorName} from {activeAlert.hospitalName} has accepted your request.
-                    </Text>
 
-                    <View className="w-full bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-                      <View className="flex-row justify-between">
-                        <Text className="text-slate-400 font-bold text-xs uppercase">Created At</Text>
-                        <Text className="text-slate-900 font-bold">{createdAt}</Text>
+                    <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-2xl text-white mb-8 uppercase tracking-tighter">Response Deployed</Text>
+
+                    <View className="w-full space-y-4">
+                      <View className="bg-black/40 p-5 rounded-[24px] border border-brand-border">
+                        <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-[3px] mb-2">Hospital Command</Text>
+                        <Text style={{ fontFamily: 'IBMPlexSans_600SemiBold' }} className="text-brand-accent text-lg uppercase tracking-tight">{activeAlert.hospitalName || 'UNITS DISPATCHED'}</Text>
                       </View>
-                      <View className="flex-row justify-between">
-                        <Text className="text-slate-400 font-bold text-xs uppercase">Accepted At</Text>
-                        <Text className="text-slate-900 font-bold">{acceptedAt}</Text>
+
+                      <View className="bg-black/40 p-5 rounded-[24px] border border-brand-border">
+                        <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-[3px] mb-2">Lead Responder</Text>
+                        <Text style={{ fontFamily: 'IBMPlexSans_600SemiBold' }} className="text-brand-accent text-lg uppercase tracking-tight">{activeAlert.doctorName || 'SEARCHING...'}</Text>
                       </View>
+                    </View>
+
+                    <View className="w-full mt-10 bg-green-500/5 p-4 rounded-2xl border border-green-500/20">
+                      <Text style={{ fontFamily: 'IBMPlexSans_500Medium' }} className="text-green-500 text-[10px] text-center uppercase tracking-widest italic">Encrypted Link Established • Constant Surveillance</Text>
                     </View>
                   </View>
               )}
             </View>
 
-            <View className="pb-6">
-              <View className="bg-slate-50 p-4 rounded-2xl mb-6">
-                <View className="flex-row justify-between mb-2">
-                  <Text className="text-slate-500">Created At:</Text>
-                  <Text className="text-slate-900 font-semibold">{createdAt}</Text>
-                </View>
-                {acceptedAt && (
-                    <View className="flex-row justify-between">
-                      <Text className="text-slate-500">Accepted At:</Text>
-                      <Text className="text-slate-900 font-semibold">{acceptedAt}</Text>
-                    </View>
-                )}
-              </View>
-
-              <TouchableOpacity
-                  onPress={handleMarkAsSaved}
-                  className="bg-slate-900 py-5 rounded-3xl items-center shadow-lg shadow-slate-200"
-              >
-                <Text className="text-white font-bold text-lg uppercase tracking-wider">Mark as Saved!</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={handleMarkAsSaved} className="bg-brand-card py-6 rounded-[32px] items-center border border-brand-border">
+              <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-green-500 uppercase tracking-[4px]">Abort / Mark Safe</Text>
+            </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
     );
   }
 
-  // Default SOS Screen
   return (
-      <View className="flex-1 bg-white p-6 justify-center">
-        <View className="items-center mb-12">
-          <View className="w-20 h-20 bg-red-100 rounded-full items-center justify-center mb-4">
-            <Ionicons name="megaphone" size={40} color="#ef4444" />
-          </View>
-          <Text className="text-3xl font-bold text-slate-800">Emergency SOS</Text>
-          <Text className="text-slate-500 text-center mt-2">
-            Select the severity of your emergency to notify nearby responders.
-          </Text>
+      <View className="flex-1 bg-black">
+        <View style={{ height: SCREEN_HEIGHT * 0.58 }} className="w-full relative">
+          {currentLocation ? (
+              <SOSMap latitude={currentLocation.latitude} longitude={currentLocation.longitude} />
+          ) : (
+              <View className="flex-1 items-center justify-center bg-brand-dark">
+                <ActivityIndicator size="small" color="#ee6c4d" />
+                <Text style={{ fontFamily: 'IBMPlexSans_500Medium' }} className="text-brand-muted text-[10px] uppercase tracking-[4px] mt-4">Syncing Map Node...</Text>
+              </View>
+          )}
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.9)', 'black']} className="absolute bottom-0 left-0 right-0 h-40" />
         </View>
 
-        <View className="space-y-4">
-          <TouchableOpacity
-              onPress={() => handleSosPress('high')}
-              disabled={loading}
-              className="bg-red-600 p-6 rounded-3xl flex-row items-center justify-between shadow-lg shadow-red-200"
-              style={styles.buttonShadow}
-          >
-            <View className="flex-row items-center">
-              <View className="bg-white/20 p-3 rounded-2xl mr-4">
-                <Ionicons name="flame" size={32} color="white" />
-              </View>
-              <View>
-                <Text className="text-white text-xl font-bold">High Severity</Text>
-                <Text className="text-red-100 text-sm">Life-threatening / Critical</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="white" />
-          </TouchableOpacity>
+        <View className="flex-1 px-8 justify-center pb-10">
+          <View className="flex-row justify-between items-center mb-10 px-1">
+            <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-[4px]">Deployment Sector</Text>
+            <View className="w-2 h-2 rounded-full bg-brand-vivid shadow shadow-brand-vivid" />
+          </View>
 
-          <TouchableOpacity
-              onPress={() => handleSosPress('medium')}
-              disabled={loading}
-              className="bg-amber-500 p-6 rounded-3xl flex-row items-center justify-between shadow-lg shadow-amber-200"
-              style={styles.buttonShadow}
-          >
-            <View className="flex-row items-center">
-              <View className="bg-white/20 p-3 rounded-2xl mr-4">
-                <Ionicons name="warning" size={32} color="white" />
-              </View>
-              <View>
-                <Text className="text-white text-xl font-bold">Medium Severity</Text>
-                <Text className="text-amber-500 text-sm" style={{ color: '#fffbeb' }}>Urgent / Non-Critical</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="white" />
-          </TouchableOpacity>
+          <View className="flex-row gap-6">
+            <TouchableOpacity
+                onPress={() => handleSosPress('high')}
+                disabled={loading}
+                activeOpacity={0.8}
+                className="flex-1 aspect-square bg-[#ef4444] rounded-[48px] items-center justify-center shadow-2xl shadow-red-950"
+            >
+              <Ionicons name="flame" size={48} color="white" />
+              <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-white text-base mt-3 uppercase tracking-tighter">High</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-              onPress={() => handleSosPress('low')}
-              disabled={loading}
-              className="bg-emerald-500 p-6 rounded-3xl flex-row items-center justify-between shadow-lg shadow-emerald-200"
-              style={styles.buttonShadow}
-          >
-            <View className="flex-row items-center">
-              <View className="bg-white/20 p-3 rounded-2xl mr-4">
-                <Ionicons name="shield-checkmark" size={32} color="white" />
-              </View>
-              <View>
-                <Text className="text-white text-xl font-bold">Low Severity</Text>
-                <Text className="text-emerald-100 text-sm">Minor Incident / Precautionary</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="white" />
-          </TouchableOpacity>
+            <TouchableOpacity
+                onPress={() => handleSosPress('medium')}
+                disabled={loading}
+                activeOpacity={0.8}
+                className="flex-1 aspect-square bg-[#f59e0b] rounded-[48px] items-center justify-center shadow-2xl shadow-amber-950"
+            >
+              <Ionicons name="warning" size={48} color="white" />
+              <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-white text-base mt-3 uppercase tracking-tighter">Medium</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/*<TouchableOpacity onPress={() => handleSosPress('low')} disabled={loading} className="mt-12 items-center">*/}
+          {/*  <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[11px] uppercase tracking-[5px] opacity-60 italic">Low Severity Protocol</Text>*/}
+          {/*</TouchableOpacity>*/}
         </View>
 
         {loading && (
-            <View className="absolute inset-0 bg-white/60 flex-1 justify-center items-center">
-              <ActivityIndicator size="large" color="#ef4444" />
-              <Text className="mt-4 text-slate-800 font-bold">Processing...</Text>
+            <View className="absolute inset-0 bg-black/70 flex-1 justify-center items-center z-[2000]">
+              <ActivityIndicator size="large" color="#ee6c4d" />
+              <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="mt-4 text-white uppercase tracking-[4px]">Transmitting...</Text>
             </View>
         )}
       </View>
@@ -420,19 +325,13 @@ export default function SosScreen() {
 }
 
 const styles = StyleSheet.create({
-  buttonShadow: {
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
   radarCircle: {
     position: 'absolute',
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: 'rgba(238, 108, 77, 0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.5)',
+    borderColor: 'rgba(238, 108, 77, 0.4)',
   }
 });

@@ -34,13 +34,13 @@ export const uploadAlertImage = async (uri: string, alertId: string, userId: str
   try {
     const response = await fetch(uri);
     const blob = await response.blob();
-    
+
     const timestamp = Date.now();
     const storageRef = ref(storage, `emergencies/${userId}_${timestamp}.jpg`);
-    
+
     await uploadBytes(storageRef, blob);
     const downloadURL = await getDownloadURL(storageRef);
-    
+
     return { success: true, url: downloadURL };
   } catch (error: any) {
     console.error("Error uploading image:", error);
@@ -52,10 +52,10 @@ export const uploadAlertImage = async (uri: string, alertId: string, userId: str
  * Updates an alert with additional details and image URL.
  */
 export const updateAlertDetails = async (
-  alertId: string, 
-  userId: string, 
-  details?: string, 
-  imageUrl?: string
+    alertId: string,
+    userId: string,
+    details?: string,
+    imageUrl?: string
 ) => {
   try {
     const userAlertRef = doc(db, "userDetails", userId, "Alerts", alertId);
@@ -64,7 +64,7 @@ export const updateAlertDetails = async (
     const updateData: any = {};
     if (details) updateData.additionalDetails = details;
     if (imageUrl) updateData.imageUrl = imageUrl;
-    
+
     if (Object.keys(updateData).length === 0) return { success: true };
 
     const batch = writeBatch(db);
@@ -84,16 +84,16 @@ export const updateAlertDetails = async (
  * and the root 'liveAlerts' collection for efficient querying.
  */
 export const createAlert = async (
-  userId: string,
-  severity: AlertSeverity,
-  location: LocationData,
-  searchRadiusKm: number = 5
+    userId: string,
+    severity: AlertSeverity,
+    location: LocationData,
+    searchRadiusKm: number = 5
 ) => {
   try {
     // Create references with the same ID for both locations
     const userAlertRef = doc(collection(db, "userDetails", userId, "Alerts"));
     const liveAlertRef = doc(db, "liveAlerts", userAlertRef.id);
-    
+
     const alertData = {
       userId, // Explicitly store userId for root-level querying
       severity,
@@ -108,7 +108,7 @@ export const createAlert = async (
     const batch = writeBatch(db);
     batch.set(userAlertRef, alertData);
     batch.set(liveAlertRef, alertData);
-    
+
     await batch.commit();
 
     return { success: true, id: userAlertRef.id };
@@ -122,17 +122,17 @@ export const createAlert = async (
  * Creates a bystander alert directly in the liveAlerts collection without writing to user history.
  */
 export const createBystanderAlert = async (
-  reporterId: string,
-  patientName: string,
-  severity: AlertSeverity,
-  location: LocationData,
-  details: string,
-  imageUrl: string,
-  searchRadiusKm: number = 5
+    reporterId: string,
+    patientName: string,
+    severity: AlertSeverity,
+    location: LocationData,
+    details: string,
+    imageUrl: string,
+    searchRadiusKm: number = 5
 ) => {
   try {
     const liveAlertRef = doc(collection(db, "liveAlerts"));
-    
+
     const alertData = {
       userId: reporterId,
       isBystanderReport: true,
@@ -161,12 +161,12 @@ export const createBystanderAlert = async (
  * Updates both the user's alert and the live alert, unless it is a bystander report.
  */
 export const acceptAlert = async (
-  alertId: string,
-  userId: string,
-  helperId: string,
-  doctorName: string,
-  hospitalName: string,
-  isBystanderReport: boolean = false
+    alertId: string,
+    userId: string,
+    helperId: string,
+    doctorName: string,
+    hospitalName: string,
+    isBystanderReport: boolean = false
 ) => {
   try {
     const liveAlertRef = doc(db, "liveAlerts", alertId);
@@ -203,7 +203,7 @@ export const markAsSaved = async (alertId: string, userId: string, isBystanderRe
     const liveAlertRef = doc(db, "liveAlerts", alertId);
 
     const batch = writeBatch(db);
-    
+
     // Remove from live alerts
     batch.delete(liveAlertRef);
 
@@ -226,8 +226,8 @@ export const markAsSaved = async (alertId: string, userId: string, isBystanderRe
  */
 export const listenToActiveAlerts = (callback: (alerts: ActiveAlert[]) => void) => {
   const alertsQuery = query(
-    collection(db, 'liveAlerts'),
-    where('status', '==', 'pending')
+      collection(db, 'liveAlerts'),
+      where('status', '==', 'pending')
   );
 
   return onSnapshot(alertsQuery, (snapshot) => {
@@ -256,9 +256,9 @@ export const listenToActiveAlerts = (callback: (alerts: ActiveAlert[]) => void) 
  */
 export const listenToMyAlert = (userId: string, callback: (alert: ActiveAlert | null) => void) => {
   const alertsQuery = query(
-    collection(db, 'liveAlerts'),
-    where('userId', '==', userId),
-    where('status', 'in', ['pending', 'accepted'])
+      collection(db, 'liveAlerts'),
+      where('userId', '==', userId),
+      where('status', 'in', ['pending', 'accepted'])
   );
 
   return onSnapshot(alertsQuery, (snapshot) => {

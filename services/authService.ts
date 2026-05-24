@@ -8,15 +8,25 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, getDoc, collection } from "firebase/firestore";
 
+export interface MedicalDocument {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  uploadedAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
   name: string;
+  photoURL?: string;
   allergens?: string;
   medications?: string;
   bloodGroup?: string;
   role: string;
   createdAt: number;
+  documents?: MedicalDocument[];
 }
 
 /** 

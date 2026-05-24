@@ -86,7 +86,7 @@ const Chatbot = () => {
 
             // Format for Gemma-3 / It models
             let prompt = `<start_of_turn>system\nYou are a professional emergency first-aid assistant for RoadSOS. Provide concise, life-saving instructions. Use the user's medical history for safety.${medicalHistoryString}<end_of_turn>\n`;
-            
+
             // Add conversation history (limited to last few for context window)
             const recentMessages = updatedMessages.slice(-5);
             recentMessages.forEach(msg => {
@@ -115,10 +115,10 @@ const Chatbot = () => {
         <View className={`mb-4 max-w-[85%] ${item.role === 'user' ? 'self-end' : 'self-start'}`}>
             <View className={`p-4 rounded-2xl ${
                 item.role === 'user'
-                    ? 'bg-red-600 rounded-tr-none'
-                    : 'bg-gray-100 border border-gray-200 rounded-tl-none'
+                    ? 'bg-brand-card border border-brand-border'
+                    : 'bg-brand-vivid'
             }`}>
-                <Text className={`${item.role === 'user' ? 'text-white font-medium' : 'text-gray-800'} text-base leading-6`}>
+                <Text className={`${item.role === 'user' ? 'text-white' : 'text-black'} text-base leading-6`}>
                     {item.content}
                 </Text>
             </View>
@@ -129,7 +129,7 @@ const Chatbot = () => {
         <SafeAreaView
             style={{
                 flex: 1,
-                backgroundColor: 'white',
+                backgroundColor: '#000000',
             }}
         >
 
@@ -138,23 +138,23 @@ const Chatbot = () => {
                 className="flex-1"
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-                <View style={{ flex: 1, paddingHorizontal: 16 }}>
+                <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 50}}>
                     {/* Header */}
-                    <View className="py-4 border-b border-gray-100 flex-row items-center">
-                        <View className="w-10 h-10 bg-red-100 rounded-full items-center justify-center mr-3">
-                            <Ionicons name="medical" size={20} color="#dc2626" />
+                    <View className="py-4 border-b border-brand-border flex-row items-center">
+                        <View className="w-10 h-10 bg-brand-card rounded-full items-center justify-center mr-3 border border-brand-border">
+                            <Ionicons name="medical" size={20} color="#ee6c4d" />
                         </View>
                         <View>
-                            <Text className="text-xl font-bold text-gray-900">Offline First Aid AI</Text>
-                            <Text className="text-xs text-gray-500">{modelLoading ? 'Initializing model...' : 'Running Locally'}</Text>
+                            <Text className="text-xl font-bold text-brand-accent">Offline First Aid AI</Text>
+                            <Text className="text-xs text-brand-muted">{modelLoading ? 'Initializing model...' : 'Running Locally'}</Text>
                         </View>
-                        {modelLoading && <ActivityIndicator size="small" color="#dc2626" className="ml-auto" />}
+                        {modelLoading && <ActivityIndicator size="small" color="#ee6c4d" className="ml-auto" />}
                     </View>
 
                     {/* Alert Message */}
-                    <View className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 flex-row items-start">
-                        <Ionicons name="warning" size={18} color="#dc2626" className="mr-2" />
-                        <Text className="text-xs text-red-800 flex-1 ml-2">
+                    <View className="mt-4 p-3 bg-brand-card rounded-xl border border-brand-border flex-row items-start">
+                        <Ionicons name="warning" size={18} color="#ee6c4d" className="mr-2" />
+                        <Text className="text-xs text-brand-muted flex-1 ml-2">
                             <Text className="font-bold">Disclaimer:</Text> This is an OFFLINE AI. It provides guidance based on your profile. For severe emergencies, call 911 immediately.
                         </Text>
                     </View>
@@ -182,18 +182,18 @@ const Chatbot = () => {
 
                     {loading && (
                         <View className="flex-row items-center mb-6 ml-2">
-                            <ActivityIndicator size="small" color="#dc2626" />
-                            <Text className="ml-2 text-gray-400 text-sm italic">Local AI is thinking...</Text>
+                            <ActivityIndicator size="small" color="#ee6c4d" />
+                            <Text className="ml-2 text-brand-muted text-sm italic">Local AI is thinking...</Text>
                         </View>
                     )}
 
                     {/* Input Area */}
                     <View className="pb-4 pt-2">
-                        <View className="flex-row items-end bg-gray-50 rounded-3xl px-4 py-2 border border-gray-200">
+                        <View className="flex-row items-end bg-brand-card rounded-3xl px-4 py-2 border border-brand-border">
                             <TextInput
-                                className="flex-1 text-base text-gray-800 py-2 max-h-32"
+                                className="flex-1 text-base text-white py-2 max-h-32"
                                 placeholder={modelLoading ? "Loading model..." : "Describe the medical situation..."}
-                                placeholderTextColor="#94a3b8"
+                                placeholderTextColor="#444444"
                                 value={inputText}
                                 onChangeText={setInputText}
                                 multiline={false}
@@ -205,7 +205,7 @@ const Chatbot = () => {
                                 onPress={handleSend}
                                 disabled={loading || inputText.trim() === '' || modelLoading}
                                 className={`ml-2 w-10 h-10 rounded-full items-center justify-center ${
-                                    (inputText.trim() === '' || modelLoading) ? 'bg-gray-200' : 'bg-red-600'
+                                    (inputText.trim() === '' || modelLoading) ? 'bg-brand-dark' : 'bg-brand-vivid'
                                 }`}
                             >
                                 <Ionicons

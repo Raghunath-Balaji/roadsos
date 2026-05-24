@@ -1,76 +1,69 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, BackHandler, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, BackHandler } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface DriveModeOverlayProps {
   onExit: () => void;
 }
 
 /**
- * DriveModeOverlay Component
- * Provides a "soft lock" UI to prevent accidental app navigation or closure
- * while driving.
+ * Monochrome Corporate DriveMode Overlay
+ * Matches the Dashboard aesthetic with Orange/Black/White.
  */
 export default function DriveModeOverlay({ onExit }: DriveModeOverlayProps) {
+  const insets = useSafeAreaInsets();
+
   useEffect(() => {
     // Intercept back button on Android
-    const backAction = () => {
-      // Prevent going back
-      return true;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
-
+    const backAction = () => true;
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, []);
 
   return (
-    <View style={StyleSheet.absoluteFill} className="z-[1000]">
-      <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill}>
-        <View className="flex-1 justify-center items-center p-8">
-          <View className="bg-blue-600/20 p-8 rounded-full mb-8">
-            <Ionicons name="car-sport" size={80} color="#3b82f6" />
+    <View style={StyleSheet.absoluteFill} className="z-[1000] bg-[#111111]">
+        <View style={{ paddingTop: insets.top + 60 }} className="flex-1 items-center p-10">
+          
+          <View className="w-32 h-32 bg-brand-vivid rounded-[40px] items-center justify-center mb-10 shadow-lg shadow-brand-vivid">
+            <Ionicons name="car-sport" size={60} color="white" />
           </View>
           
-          <Text className="text-white text-4xl font-black text-center mb-2">
-            DRIVE MODE
+          <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-white text-5xl tracking-tighter text-center mb-4 uppercase italic">
+            Drive Mode
           </Text>
-          <Text className="text-blue-200 text-lg text-center mb-12 font-medium">
-            Crash detection is active. We are monitoring your journey for sudden impacts.
+          <Text style={{ fontFamily: 'IBMPlexSans_500Medium' }} className="text-brand-muted text-lg text-center mb-16 leading-6 px-4">
+            Safety protocol is active. System is monitoring for high-impact events.
           </Text>
 
-          <View className="w-full space-y-6">
-            <View className="bg-white/10 p-6 rounded-3xl border border-white/10">
-              <View className="flex-row items-center mb-4">
-                <View className="w-3 h-3 rounded-full bg-green-500 animate-pulse mr-3" />
-                <Text className="text-green-400 font-bold tracking-widest text-xs uppercase">
-                  Sensors Online
+          <View className="w-full">
+            <View className="bg-brand-card p-6 rounded-[32px] border border-brand-vivid/20 mb-10">
+              <View className="flex-row items-center mb-3">
+                <View className="w-2 h-2 rounded-full bg-green-500 mr-3" />
+                <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-green-500 text-[10px] uppercase tracking-[3px]">
+                  Guardian Link Active
                 </Text>
               </View>
-              <Text className="text-slate-300 text-sm leading-5">
-                Keep your phone stable in a holder for best accuracy. Do not use your phone while driving.
+              <Text style={{ fontFamily: 'IBMPlexSans_500Medium' }} className="text-brand-accent text-sm leading-5">
+                Place device in a stable holder. Avoid interaction while vehicle is in motion.
               </Text>
             </View>
 
             <TouchableOpacity 
               onPress={onExit}
-              activeOpacity={0.7}
-              className="bg-white/10 py-6 rounded-3xl border border-white/20 items-center flex-row justify-center"
+              activeOpacity={0.8}
+              className="bg-brand-card py-6 rounded-[32px] border border-brand-border items-center flex-row justify-center shadow-2xl shadow-black"
             >
-              <Ionicons name="lock-open-outline" size={24} color="white" />
-              <Text className="text-white text-xl font-bold ml-3">Exit Drive Mode</Text>
+              <Ionicons name="lock-open-outline" size={24} color="#ee6c4d" />
+              <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-white text-xl ml-4 tracking-tight">EXIT PROTOCOL</Text>
             </TouchableOpacity>
           </View>
 
-          <Text className="text-white/40 text-xs mt-auto font-bold tracking-tighter uppercase">
-            RoadSOS • Guardian Protocol Active
+          <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] mt-auto uppercase tracking-[4px]">
+            RoadSOS • Guardian Active
           </Text>
         </View>
-      </BlurView>
     </View>
   );
 }

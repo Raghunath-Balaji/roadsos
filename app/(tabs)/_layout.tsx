@@ -11,18 +11,18 @@ export default function TabLayout() {
         <Tabs
             screenOptions={{
                 headerShown: false,
-                tabBarActiveTintColor: '#3b82f6', // blue-500
-                tabBarInactiveTintColor: '#94a3b8', // slate-400
+                tabBarActiveTintColor: '#ffffff',
+                tabBarInactiveTintColor: '#777777',
                 tabBarStyle: {
+                    backgroundColor: '#000000',
+                    borderTopColor: '#111111',
                     borderTopWidth: 1,
-                    borderTopColor: '#f1f5f9',
-                    height: 60,
-                    paddingBottom: 10,
-                    paddingTop: 5,
                 },
                 tabBarLabelStyle: {
-                    fontSize: 12,
-                    fontWeight: '500',
+                    fontSize: 10,
+                    fontWeight: '700',
+                    textTransform: 'uppercase',
+                    letterSpacing: 1,
                 },
             }}
         >

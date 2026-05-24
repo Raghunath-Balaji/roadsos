@@ -23,9 +23,9 @@ import {
 import { useRouter } from 'expo-router';
 
 /**
- * Report Screen
+ * Report Screen (Corporate Dark Aesthetic)
  * Allows users to report emergencies on behalf of others.
- * Mandatory photo, optional name and details.
+ * Strictly uses hex colors to match the dashboard.
  */
 export default function ReportScreen() {
   const [patientName, setPatientName] = useState('');
@@ -56,7 +56,6 @@ export default function ReportScreen() {
   };
 
   const handleSubmit = async () => {
-    // 1. Mandatory Photo Check
     if (!imageUri) {
       Alert.alert("Photo Required", "Please take a photo of the incident for verification.");
       return;
@@ -71,7 +70,6 @@ export default function ReportScreen() {
     setSubmitting(true);
 
     try {
-      // 2. Get Location
       const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
       if (locStatus !== 'granted') {
         throw new Error("Location access is required to send emergency services.");
@@ -81,11 +79,9 @@ export default function ReportScreen() {
         accuracy: Location.Accuracy.Balanced,
       });
 
-      // 3. Upload Image (Temp alert ID used for naming)
       const uploadRes = await uploadAlertImage(imageUri, "bystander", user.uid);
       if (!uploadRes.success) throw new Error(uploadRes.error);
 
-      // 4. Create Alert
       const result = await createBystanderAlert(
         user.uid,
         patientName || 'John Doe',
@@ -104,12 +100,11 @@ export default function ReportScreen() {
           "Report Sent",
           "The emergency services have been notified. Thank you for your assistance.",
           [{ text: "OK", onPress: () => {
-            // Reset Form
             setPatientName('');
             setSeverity('medium');
             setDetails('');
             setImageUri(null);
-            router.replace('/(tabs)/sos'); // Redirect to tracking or home
+            router.replace('/(tabs)/sos');
           }}]
         );
       } else {
@@ -126,10 +121,10 @@ export default function ReportScreen() {
   const SeverityButton = ({ level, label, color }: { level: AlertSeverity, label: string, color: string }) => (
     <TouchableOpacity
       onPress={() => setSeverity(level)}
-      className={`flex-1 py-3 rounded-xl items-center border-2 ${severity === level ? 'border-slate-900 bg-white shadow-sm' : 'border-transparent bg-slate-100'}`}
+      className={`flex-1 py-3 rounded-xl items-center border-2 ${severity === level ? 'border-brand-vivid bg-brand-card' : 'border-brand-border bg-brand-dark'}`}
     >
       <View className={`w-3 h-3 rounded-full mb-1`} style={{ backgroundColor: color }} />
-      <Text className={`text-[10px] font-bold uppercase ${severity === level ? 'text-slate-900' : 'text-slate-500'}`}>
+      <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className={`text-[10px] uppercase ${severity === level ? 'text-brand-accent' : 'text-brand-muted'}`}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -138,30 +133,31 @@ export default function ReportScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-white"
+      className="flex-1 bg-black"
     >
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 24, paddingTop: 60 }}>
-        <View className="mb-8">
-          <Text className="text-3xl font-extrabold text-slate-900">Bystander Report</Text>
-          <Text className="text-slate-500 mt-2">Report an emergency for someone else. Photo verification is mandatory.</Text>
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 24, paddingTop: 120 }}>
+        <View style={{ marginBottom: 80 }} className="px-1">
+          <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-5xl text-white tracking-tighter">Public Eye</Text>
         </View>
 
-        <View className="space-y-6">
+        <View>
           {/* Patient Name */}
-          <View>
-            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-2 ml-1">Patient Name (Optional)</Text>
+          <View style={{ marginBottom: 60 }}>
+            <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-[2px] mb-6 ml-1">Patient Identity</Text>
             <TextInput
-              className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-slate-900"
-              placeholder="e.g. John Doe"
+              style={{ fontFamily: 'IBMPlexSans_500Medium', color: '#ffffff' }}
+              className="bg-brand-card border border-brand-border rounded-[20px] p-6"
+              placeholder="Full Name (Optional)"
+              placeholderTextColor="#444444"
               value={patientName}
               onChangeText={setPatientName}
             />
           </View>
 
           {/* Severity */}
-          <View>
-            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-2 ml-1">Emergency Level</Text>
-            <View className="flex-row gap-2">
+          <View style={{ marginBottom: 60 }}>
+            <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-[2px] mb-6 ml-1">Emergency Severity</Text>
+            <View className="flex-row gap-4">
               <SeverityButton level="low" label="Low" color="#10b981" />
               <SeverityButton level="medium" label="Medium" color="#f59e0b" />
               <SeverityButton level="high" label="High" color="#ef4444" />
@@ -169,34 +165,39 @@ export default function ReportScreen() {
           </View>
 
           {/* Photo Capture */}
-          <View>
-            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-2 ml-1">Visual Verification (Mandatory)</Text>
+          <View style={{ marginBottom: 60 }}>
+            <View className="flex-row items-center mb-6 ml-1">
+              <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-[2px]">Visual Evidence</Text>
+              <Text className="text-brand-vivid ml-1 text-xs">*</Text>
+            </View>
             <TouchableOpacity 
               onPress={takePhoto}
-              className={`w-full aspect-[4/3] rounded-3xl border-2 border-dashed items-center justify-center overflow-hidden ${imageUri ? 'border-blue-500' : 'border-slate-200 bg-slate-50'}`}
+              className={`w-full aspect-[4/3] rounded-[40px] border-2 border-dashed items-center justify-center overflow-hidden ${imageUri ? 'border-brand-vivid' : 'border-brand-border bg-brand-card'}`}
             >
               {imageUri ? (
                 <View className="w-full h-full">
                   <Image source={{ uri: imageUri }} className="w-full h-full" />
-                  <View className="absolute bottom-4 right-4 bg-blue-600 w-10 h-10 rounded-full items-center justify-center shadow-lg">
-                    <Ionicons name="camera" size={20} color="white" />
+                  <View className="absolute bottom-6 right-6 bg-brand-vivid w-14 h-14 rounded-full items-center justify-center shadow-lg shadow-black">
+                    <Ionicons name="camera" size={28} color="black" />
                   </View>
                 </View>
               ) : (
                 <View className="items-center">
-                  <Ionicons name="camera-outline" size={48} color="#94a3b8" />
-                  <Text className="text-slate-400 font-medium mt-2">Tap to take photo</Text>
+                  <Ionicons name="camera-outline" size={56} color="#222222" />
+                  <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-widest mt-4">Tap to Capture Incident</Text>
                 </View>
               )}
             </TouchableOpacity>
           </View>
 
           {/* Additional Details */}
-          <View>
-            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-2 ml-1">Additional Details (Optional)</Text>
+          <View style={{ marginBottom: 60 }}>
+            <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-[2px] mb-6 ml-1">Incident Intelligence</Text>
             <TextInput
-              className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-slate-900 min-h-[100px]"
-              placeholder="Describe the injuries or location specifics..."
+              style={{ fontFamily: 'IBMPlexSans_500Medium', color: '#ffffff' }}
+              className="bg-brand-card border border-brand-border rounded-[20px] p-6 min-h-[160px]"
+              placeholder="Describe situation, injuries, or precise location..."
+              placeholderTextColor="#444444"
               multiline
               textAlignVertical="top"
               value={details}
@@ -205,16 +206,16 @@ export default function ReportScreen() {
           </View>
 
           {/* Search Radius */}
-          <View>
-            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-3 ml-1">Response Radius</Text>
-            <View className="flex-row gap-2">
+          <View style={{ marginBottom: 80 }}>
+            <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-brand-muted text-[10px] uppercase tracking-[2px] mb-6 ml-1">Response Radius</Text>
+            <View className="flex-row gap-4">
               {[5, 10, 20].map((r) => (
                 <TouchableOpacity
                   key={r}
                   onPress={() => setSearchRadius(r)}
-                  className={`flex-1 py-2 rounded-xl items-center border ${searchRadius === r ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-200'}`}
+                  className={`flex-1 py-4 rounded-xl items-center border ${searchRadius === r ? 'bg-brand-accent border-brand-accent' : 'bg-brand-card border-brand-border'}`}
                 >
-                  <Text className={`font-bold text-xs ${searchRadius === r ? 'text-white' : 'text-slate-500'}`}>{r}km</Text>
+                  <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className={`text-sm ${searchRadius === r ? 'text-black' : 'text-brand-muted'}`}>{r}KM</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -224,17 +225,17 @@ export default function ReportScreen() {
           <TouchableOpacity
             onPress={handleSubmit}
             disabled={submitting}
-            className={`py-5 rounded-3xl items-center shadow-lg ${submitting || !imageUri ? 'bg-slate-300 shadow-none' : 'bg-red-600 shadow-red-200'}`}
+            className={`py-6 rounded-[40px] items-center shadow-2xl ${submitting || !imageUri ? 'bg-brand-border opacity-50' : 'bg-brand-vivid'}`}
           >
             {submitting ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color="black" />
             ) : (
-              <Text className="text-white font-bold text-lg uppercase tracking-widest">Broadcast Report</Text>
+              <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-slate-200 text-sm uppercase tracking-[4px]">Broadcast Report</Text>
             )}
           </TouchableOpacity>
         </View>
 
-        <View className="h-10" />
+        <View className="h-32" />
       </ScrollView>
     </KeyboardAvoidingView>
   );
