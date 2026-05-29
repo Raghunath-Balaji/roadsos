@@ -10,6 +10,7 @@ import DriveModeOverlay from '../../components/DriveModeOverlay';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMedicalDocument } from '../../services/documentService';
+import { syncUserContextToLocal } from '../../services/ragservice';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -141,8 +142,15 @@ export default function Dashboard() {
       const asset = result.assets[0];
       const res = await uploadMedicalDocument(auth.currentUser!.uid, asset.uri, asset.name, asset.mimeType || '');
       
-      if (!res.success) throw new Error(res.error);
-      Alert.alert("Success", "Added to vault.");
+      if (res.success) {
+        Alert.alert("Success", "Added to vault.");
+        // Sync context to local after 10 seconds to allow backend processing
+        setTimeout(() => {
+          syncUserContextToLocal(auth.currentUser!.uid);
+        }, 10000);
+      } else {
+        throw new Error(res.error);
+      }
     } catch (error: any) {
       Alert.alert("Upload Error", error.message);
     } finally {

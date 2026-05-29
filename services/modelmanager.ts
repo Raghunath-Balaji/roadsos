@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 
-const MODEL_VERSION = '1.0.0';
+const MODEL_VERSION = '1.0.1';
 const MODEL_PATH = RNFS.DocumentDirectoryPath + '/model.gguf';
 const VERSION_PATH = RNFS.DocumentDirectoryPath + '/model_version.txt';
 
@@ -22,4 +22,5 @@ export const ensureModel = async (): Promise<string> => {
     await RNFS.writeFile(VERSION_PATH, MODEL_VERSION, 'utf8');
     console.log('Model installed successfully');
     return MODEL_PATH;
+    console.log(MODEL_PATH);
 };

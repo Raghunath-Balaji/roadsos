@@ -15,13 +15,15 @@ import {
 import { initLlama } from 'llama.rn';
 import { LlamaContext } from 'llama.rn';
 import { ChatMessage, getUserMedicalInfo } from '../../services/chatservice';
-import { File, Paths } from 'expo-file-system';
 import { ensureModel } from '../../services/modelmanager';
+import { readLocalUserContext } from '../../services/ragservice';
+import { auth } from '../../config/firebase';
 
 const Chatbot = () => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputText, setInputText] = useState('');
     const [medicalInfo, setMedicalInfo] = useState<any>(null);
+    const [localContext, setLocalContext] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [context, setContext] = useState<LlamaContext | null>(null);
     const [modelLoading, setModelLoading] = useState(true);
@@ -32,16 +34,25 @@ const Chatbot = () => {
         setupAI();
     }, []);
 
-
-
     const setupAI = async () => {
         try {
+            const user = auth.currentUser;
+            if (!user) return;
+
             const info = await getUserMedicalInfo();
             setMedicalInfo(info);
+            console.log("[RAG-Debug] Medical Info Loaded:", !!info, info);
+
+            // Fetch local RAG context
+            const cachedContext = await readLocalUserContext(user.uid);
+            console.log("[RAG-Debug] Local Context Loaded:", !!cachedContext);
+            if (cachedContext) {
+                setLocalContext(cachedContext);
+            }
 
             setMessages([{
                 role: 'assistant',
-                content: `Hello ${info?.name || 'there'}! Initializing offline AI...`
+                content: `Guardian AI initializing for ${info?.name || 'Authorized User'}. Link established.`
             }]);
 
             const modelPath = await ensureModel();
@@ -51,15 +62,15 @@ const Chatbot = () => {
                 is_model_asset: false,
                 use_mlock: false,
                 use_mmap: true,
-                n_ctx: 512,
-                n_threads: 2,
+                n_ctx: 2048,
+                n_threads: 4,
             });
 
             setContext(ctx);
             setModelLoading(false);
             setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: "Local AI is ready! How can I help you?"
+                content: "Local Intelligence Active. How can I assist you today?"
             }]);
 
         } catch (error) {
@@ -84,8 +95,12 @@ const Chatbot = () => {
                 ? `\nUser Medical History:\n- Allergens: ${medicalInfo.allergens}\n- Medications: ${medicalInfo.medications}\n- Blood Group: ${medicalInfo.bloodGroup}`
                 : "\nUser Medical History: Not available.";
 
+            const additionalContext = localContext 
+                ? `\nAdditional Context from Vault:\n${localContext}`
+                : "";
+
             // Format for Gemma-3 / It models
-            let prompt = `<start_of_turn>system\nYou are a professional emergency first-aid assistant for RoadSOS. Provide concise, life-saving instructions. Use the user's medical history for safety.${medicalHistoryString}<end_of_turn>\n`;
+            let prompt = `<start_of_turn>system\nYou are a professional emergency first-aid assistant for RoadSOS. Provide concise, life-saving instructions. Use the user's medical history and vault context for safety.${medicalHistoryString}${additionalContext}<end_of_turn>\n`;
 
             // Add conversation history (limited to last few for context window)
             const recentMessages = updatedMessages.slice(-5);
@@ -93,6 +108,7 @@ const Chatbot = () => {
                 prompt += `<start_of_turn>${msg.role}\n${msg.content}<end_of_turn>\n`;
             });
             prompt += `<start_of_turn>model\n`;
+            console.log("[RAG-Debug] Final Prompt Configuration:", prompt);
 
             const result = await context.completion({
                 prompt: prompt,
@@ -145,8 +161,8 @@ const Chatbot = () => {
                             <Ionicons name="medical" size={20} color="#ee6c4d" />
                         </View>
                         <View>
-                            <Text className="text-xl font-bold text-brand-accent">Offline First Aid AI</Text>
-                            <Text className="text-xs text-brand-muted">{modelLoading ? 'Initializing model...' : 'Running Locally'}</Text>
+                            <Text style={{ fontFamily: 'IBMPlexSans_700Bold' }} className="text-xl text-brand-accent uppercase tracking-tighter">First Aid AI</Text>
+                            <Text style={{ fontFamily: 'IBMPlexSans_500Medium' }} className="text-[10px] text-brand-muted uppercase tracking-widest">{modelLoading ? 'Initializing Node' : 'Active Link'}</Text>
                         </View>
                         {modelLoading && <ActivityIndicator size="small" color="#ee6c4d" className="ml-auto" />}
                     </View>
@@ -154,8 +170,8 @@ const Chatbot = () => {
                     {/* Alert Message */}
                     <View className="mt-4 p-3 bg-brand-card rounded-xl border border-brand-border flex-row items-start">
                         <Ionicons name="warning" size={18} color="#ee6c4d" className="mr-2" />
-                        <Text className="text-xs text-brand-muted flex-1 ml-2">
-                            <Text className="font-bold">Disclaimer:</Text> This is an OFFLINE AI. It provides guidance based on your profile. For severe emergencies, call 911 immediately.
+                        <Text style={{ fontFamily: 'IBMPlexSans_500Medium' }} className="text-xs text-brand-muted flex-1 ml-2 uppercase tracking-tight">
+                            Protocol: Advisories are supplemental. Deploy primary EMS if necessary.
                         </Text>
                     </View>
 
@@ -170,7 +186,7 @@ const Chatbot = () => {
                         }}
                         onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
                         nestedScrollEnabled={true}
-                        showsVerticalScrollIndicator={true}
+                        showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                     >
                         {messages.map((item, index) => (
@@ -183,7 +199,7 @@ const Chatbot = () => {
                     {loading && (
                         <View className="flex-row items-center mb-6 ml-2">
                             <ActivityIndicator size="small" color="#ee6c4d" />
-                            <Text className="ml-2 text-brand-muted text-sm italic">Local AI is thinking...</Text>
+                            <Text style={{ fontFamily: 'IBMPlexSans_600SemiBold' }} className="ml-2 text-brand-muted text-[10px] uppercase tracking-widest">Processing Data...</Text>
                         </View>
                     )}
 
@@ -191,14 +207,13 @@ const Chatbot = () => {
                     <View className="pb-4 pt-2">
                         <View className="flex-row items-end bg-brand-card rounded-3xl px-4 py-2 border border-brand-border">
                             <TextInput
-                                className="flex-1 text-base text-white py-2 max-h-32"
+                                style={{ fontFamily: 'IBMPlexSans_500Medium', color: '#ffffff' }}
+                                className="flex-1 text-base py-2 max-h-32"
                                 placeholder={modelLoading ? "Loading model..." : "Describe the medical situation..."}
                                 placeholderTextColor="#444444"
                                 value={inputText}
                                 onChangeText={setInputText}
-                                multiline={false}
-                                returnKeyType="send"
-                                onSubmitEditing={handleSend}
+                                multiline={true}
                                 editable={!modelLoading}
                             />
                             <TouchableOpacity
